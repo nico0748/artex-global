@@ -16,21 +16,21 @@ import (
 	"time"
 )
 
-// allowLocalTargets 决定是否允许把消息投递到环回 / 链路本地地址。
+// allowLocalTargets はメッセージをループバック / リンクローカルのアドレスに届けることを許すかを決める。
 //
-// 默认拒绝。这几段地址不是 IM 机器人或公网邮件服务器会出现的地方，而它们能
-// 打到的东西很敏感：同机另一个服务的管理端口、以及云环境的元数据端点
-// （169.254.169.254，可读出实例凭据）。投递地址是管理员配的，但一个被 XSS/CSRF
-// 借用的管理会话、或共用同一 JWT 的第二个人，都能靠改配置把响应内容读回来
-// ——doJSON 会把 4xx/5xx 的响应体前 200 字节写进 last_error，而投递历史接口
-// 会把它回显出来，这就是一条半盲读原语。
+// 既定は拒否。これらのアドレス範囲は IM のボットや公開されたメールサーバーが現れる場所ではなく、しかもそこから
+// 届くものは機微である：同じマシンの別のサービスの管理ポートや、クラウド環境のメタデータのエンドポイント
+// （169.254.169.254。インスタンスの認証情報を読める）。配信先は管理者が設定するが、XSS/CSRF に
+// 乗っ取られた管理セッションや、同じ JWT を共有する2人目は、設定を変えるだけでレスポンスの内容を読み戻せる
+// ——doJSON は 4xx/5xx のレスポンスボディの先頭 200 バイトを last_error に書き、配信履歴の API が
+// それを返すので、これは半ば見えない読み取りの手段になる。
 //
-// 但「本机 SMTP 中继」（127.0.0.1:25 上的 postfix）是自建邮件的常见配置，
-// 一刀切会把人卡住。所以留一个显式逃生口而不是硬编码放行：
-// 设置 ARTEX_NOTIFY_ALLOW_LOCAL=1 即允许。
+// ただし「ローカルの SMTP 中継」（127.0.0.1:25 の postfix）は自前のメールでよくある設定なので、
+// 一律に止めると困る人が出る。そこでハードコードで通すのではなく、明示的な抜け道を残している：
+// ARTEX_NOTIFY_ALLOW_LOCAL=1 を設定すれば許可する。
 //
-// 导出为 AllowLocalTargetsEnv 是为了让测试能明确地打开它——本包与 server 包的
-// 用例大量使用 127.0.0.1 上的 httptest 假接收端，不打开就全部被守卫拦下。
+// AllowLocalTargetsEnv として公開しているのは、テストで明示的に有効にできるようにするため——このパッケージと server パッケージの
+// テストケースは 127.0.0.1 上の httptest の偽の受信側を多用しており、有効にしないとすべて防御に止められる。
 const AllowLocalTargetsEnv = "ARTEX_NOTIFY_ALLOW_LOCAL"
 
 func allowLocalTargets() bool {
@@ -38,17 +38,17 @@ func allowLocalTargets() bool {
 	return v == "1" || strings.EqualFold(v, "true")
 }
 
-// isBlockedDialIP 报告目标 IP 是否属于「默认不允许投递」的地址段。
+// isBlockedDialIP は宛先の IP が「既定では配信を許さない」アドレス範囲に属するかを報告する。
 //
-// 只拒绝环回、链路本地（含云元数据 169.254.169.254）、未指定与组播。
-// **不拒绝** RFC1918 私网：内网自建 Mattermost / SMTP 中继是很常见的合法用法，
-// 把它们一并挡掉会让功能在真实环境里直接不可用。这条取舍是刻意的——
-// 防护要挡住真正敏感的目标，同时不能把正常部署一起废掉。
+// 拒否するのはループバック、リンクローカル（クラウドのメタデータ 169.254.169.254 を含む）、未指定、マルチキャストだけ。
+// RFC1918 のプライベートネットワークは**拒否しない**：社内の自前の Mattermost / SMTP 中継はごく一般的な正当な使い方で、
+// それまで止めると実際の環境で機能がそのまま使えなくなる。この取捨は意図したもの——
+// 防御は本当に機微な宛先を止めつつ、通常の構成まで使えなくしてはならない。
 func isBlockedDialIP(ip net.IP) bool {
 	if ip == nil {
 		return true
 	}
-	// IPv4-mapped IPv6（::ffff:127.0.0.1）要还原成 IPv4 再判，否则绕过检查。
+	// IPv4 にマップされた IPv6（::ffff:127.0.0.1）は IPv4 に戻してから判定する。さもないと確認をすり抜ける。
 	if v4 := ip.To4(); v4 != nil {
 		ip = v4
 	}
@@ -56,13 +56,13 @@ func isBlockedDialIP(ip net.IP) bool {
 		ip.IsInterfaceLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast()
 }
 
-// blockInternalDial 是 http.Transport 拨号器的 Control 钩子，在**连接建立时**
-// 检查目标地址。
+// blockInternalDial は http.Transport のダイヤラの Control フックで、**接続の確立時に**
+// 宛先のアドレスを確かめる。
 //
-// 为什么设在拨号阶段而不是只在保存配置时校验：这里才是最终生效点。
-// 它同时覆盖两种绕过配置校验的情形——DNS 重绑定（校验时解析到公网 IP、
-// 真正连接时解析到内网）与重定向（虽然我们已拒绝跨主机跳转，但同主机跳转
-// 仍可能把路径指到别处）。
+// 設定の保存時の検証だけでなく接続の段階に置く理由：ここが実際に効く場所だからだ。
+// 設定の検証をすり抜ける2つの状況をあわせて防げる——DNS リバインディング（検証時は公開 IP に解決し、
+// 実際の接続時には内部ネットワークに解決する）とリダイレクト（ホストをまたぐ移動はすでに拒否しているが、同じホスト内の移動で
+// パスが別の場所を指すことはありうる）。
 func blockInternalDial(_, address string, _ syscall.RawConn) error {
 	if allowLocalTargets() {
 		return nil
@@ -81,9 +81,9 @@ func blockInternalDial(_, address string, _ syscall.RawConn) error {
 	return nil
 }
 
-// notifyTransport 在默认 Transport 的基础上只加一个拨号守卫。
-// 用 Clone 保留默认的全部调优（连接池、HTTP/2、超时、proxy 等），
-// 避免为了加一个检查而改动其它行为。
+// notifyTransport は既定の Transport に接続時の防御を1つ足すだけ。
+// Clone で既定の調整（接続プール、HTTP/2、タイムアウト、proxy など）をすべて残し、
+// 確認を1つ足すために他の動作を変えることを避ける。
 var notifyTransport = func() *http.Transport {
 	t, ok := http.DefaultTransport.(*http.Transport)
 	if !ok {
@@ -94,16 +94,16 @@ var notifyTransport = func() *http.Transport {
 	return clone
 }()
 
-// httpClient 是所有渠道投递共用的客户端。
+// httpClient はすべてのチャネルの配信で共有するクライアント。
 //
-// 刻意**不**复用项目的全局出口代理（server 侧的 GlobalProxy）：那个代理是给渗透
-// 目标流量用的，常是不稳定的隧道，而通知的可用性不该被目标网络的抖动绑架。
-// IM 推送直连即可。超时设为 15 秒——比这更慢的对端实际上已经是故障状态。
+// プロジェクト全体の出口プロキシ（server 側の GlobalProxy）はわざと使い回さ**ない**：そのプロキシはペネトレーションの
+// 対象への通信用で、不安定なトンネルであることが多く、通知の可用性が対象ネットワークの揺らぎに左右されるべきではない。
+// IM の通知は直接つなげばよい。タイムアウトは 15 秒——これより遅い相手は実際にはもう故障している。
 //
-// 拒绝跨主机重定向：本功能的投递地址都是「一个固定 endpoint」形态，正常不会
-// 重定向到别的主机；而这几家的凭据（钉钉的 access_token、企微的 key、Telegram 的
-// bot token）**就在 URL 里**，跟随跨主机跳转等于把凭据交给重定向目标。同主机
-// 的跳转（如末尾补斜杠）仍允许。
+// ホストをまたぐリダイレクトは拒否する：この機能の配信先はどれも「1つの固定された endpoint」の形で、通常は
+// 別のホストにリダイレクトされない。しかもこれら各社の認証情報（DingTalk の access_token、WeCom の key、Telegram の
+// bot token）は**URL の中にある**ので、ホストをまたぐ移動に従うことは認証情報をリダイレクト先に渡すのと同じだ。同じホスト内の
+// 移動（末尾にスラッシュを補うなど）は引き続き許す。
 var httpClient = &http.Client{
 	Timeout:   15 * time.Second,
 	Transport: notifyTransport,
@@ -118,31 +118,31 @@ var httpClient = &http.Client{
 	},
 }
 
-// respBodyLimit 限制读取响应体的大小。对端异常时可能吐回超大内容，而我们只需要
-// 错误码和一小段错误描述用于展示在投递历史里。
+// respBodyLimit はレスポンスボディを読む大きさを制限する。相手が異常なとき巨大な内容を返すことがあるが、必要なのは
+// 配信履歴に表示するためのエラーコードと短いエラーの説明だけだ。
 const respBodyLimit = 8 << 10
 
-// doJSON 发送一次请求并返回响应体（已限长）。
+// doJSON はリクエストを1回送り、レスポンスボディ（長さを制限済み）を返す。
 //
-// payload 为 nil 时发送空 body（用于 GET 或平台不要求 body 的场景）。
-// headers 里的键值原样附加，用于通用 Webhook 的自定义头。
+// payload が nil なら空の body を送る（GET や、プラットフォームが body を求めない場面で使う）。
+// headers のキーと値はそのまま付け加え、汎用 Webhook のカスタムヘッダーに使う。
 //
-// 错误分类是这个函数的核心职责：网络层失败与 5xx/408/429 归为「可重试」，
-// 其余 4xx 归为「永久失败」——重试一个 403 只是把同一个错误刷 3 遍日志。
+// エラーの分類がこの関数の中心的な役割：ネットワーク層の失敗と 5xx/408/429 は「再試行できる」とし、
+// それ以外の 4xx は「恒久的な失敗」とする——403 を再試行しても同じエラーをログに3回書くだけだ。
 func doJSON(ctx context.Context, method, url string, headers map[string]string, payload any) ([]byte, error) {
 	var body io.Reader
 	if payload != nil {
 		raw, err := json.Marshal(payload)
 		if err != nil {
-			// 序列化失败是本地 bug（配置字段类型不对），重试也不会变好。
+			// シリアライズの失敗はローカルのバグ（設定のフィールドの型の誤り）で、再試行してもよくならない。
 			return nil, Permanent(fmt.Errorf("요청 본문을 만들지 못했습니다: %w", err))
 		}
 		body = bytes.NewReader(raw)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
-		// URL 非法——多半是用户把地址填错了，属于永久失败。
-		// 这里同样不能透传 err：url.Parse 的错误文本里含完整地址。
+		// URL が不正——たいていはユーザーがアドレスを書き間違えたもので、恒久的な失敗にあたる。
+		// ここでも err はそのまま渡せない：url.Parse のエラー文には完全なアドレスが含まれている。
 		return nil, Permanent(fmt.Errorf("요청 주소가 올바르지 않습니다: %s", redactRequestTarget(url)))
 	}
 	if payload != nil {
@@ -153,14 +153,14 @@ func doJSON(ctx context.Context, method, url string, headers map[string]string, 
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		// 连接被拒、DNS 失败、超时——多为瞬时故障，交给退避重试。
+		// 接続拒否、DNS の失敗、タイムアウト——多くは一時的な故障なので、待ち時間を置いた再試行に任せる。
 		//
-		// 错误文本必须脱敏后再往外传。原因：http.Client.Do 返回的是 *url.Error，
-		// 它的 Error() 是 `Op "完整URL": 底层错误`，而本功能这几家的凭据**就在 URL 里**
-		// （钉钉 access_token、企微 key、飞书 hook id、Telegram /bot<token>/）。
-		// 不脱敏的话，凭据会顺着这条错误串流到四个地方：notification_deliveries
-		// 的 last_error（明文落库）、投递历史接口的响应（**绕过渠道配置的掩码**）、
-		// 服务端日志、以及测试发送接口回给前端的 502 文本。
+		// エラー文は必ず秘匿化してから外へ渡す。理由：http.Client.Do が返すのは *url.Error で、
+		// その Error() は `Op "完全なURL": 下層のエラー` であり、この機能の各社の認証情報は**URL の中にある**
+		// （DingTalk の access_token、WeCom の key、Feishu の hook id、Telegram の /bot<token>/）。
+		// 秘匿化しないと、認証情報がこのエラー文に乗って4か所に流れる：notification_deliveries
+		// の last_error（平文で DB に記録）、配信履歴の API のレスポンス（**チャネル設定のマスクをすり抜ける**）、
+		// サーバーのログ、そしてテスト送信の API がフロントエンドに返す 502 の文。
 		return nil, fmt.Errorf("요청에 실패했습니다: %s", redactTransportError(err))
 	}
 	defer resp.Body.Close()
@@ -171,7 +171,7 @@ func doJSON(ctx context.Context, method, url string, headers map[string]string, 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		return raw, nil
 	}
-	// 429（限流）与 408（超时）值得重试；其余 4xx 是配置或权限问题，重试无意义。
+	// 429（レート制限）と 408（タイムアウト）は再試行する価値がある。それ以外の 4xx は設定や権限の問題で、再試行しても意味がない。
 	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusRequestTimeout {
 		return nil, fmt.Errorf("상대 서버가 요청을 제한하거나 응답이 지연되었습니다 (HTTP %d): %s", resp.StatusCode, snippet(raw))
 	}
@@ -181,27 +181,27 @@ func doJSON(ctx context.Context, method, url string, headers map[string]string, 
 	return nil, Permanent(fmt.Errorf("상대 서버가 요청을 거부했습니다 (HTTP %d): %s", resp.StatusCode, snippet(raw)))
 }
 
-// snippet 把响应体压成一行短文本，用于错误信息。响应里可能带换行与大量空白，
-// 直接塞进 last_error 会让投递历史页面排版崩掉。
+// snippet はレスポンスボディを1行の短い文にまとめ、エラーメッセージに使う。レスポンスには改行や大量の空白が含まれることがあり、
+// そのまま last_error に入れると配信履歴のページのレイアウトが崩れる。
 func snippet(raw []byte) string {
 	return OneLine(string(raw), 200)
 }
 
-// redactRequestTarget 把投递地址压成「scheme://host/…」，用于错误信息。
+// redactRequestTarget は配信先を「scheme://host/…」にまとめ、エラーメッセージに使う。
 //
-// 这是本包唯一的地址脱敏口径，刻意做得**足够粗暴**：除了 scheme 与 host，
-// 其余一律丢弃。原因是没有一个「通用且安全」的方式判断 URL 的哪一段是凭据：
+// これはこのパッケージで唯一のアドレス秘匿化の基準で、わざと**十分に大ざっぱに**している：scheme と host 以外は
+// すべて捨てる。URL のどの部分が認証情報かを「汎用的かつ安全に」判断する方法はないからだ：
 //
-//	钉钉   凭据在 query      /robot/send?access_token=xxx
-//	企微   凭据在 query      /cgi-bin/webhook/send?key=xxx
-//	飞书   凭据在**路径末段** /open-apis/bot/v2/hook/<hook_id>
-//	Telegram 凭据在**路径中段** /bot<token>/sendMessage
+//	DingTalk 認証情報は query      /robot/send?access_token=xxx
+//	WeCom    認証情報は query      /cgi-bin/webhook/send?key=xxx
+//	Feishu   認証情報は**パスの末尾** /open-apis/bot/v2/hook/<hook_id>
+//	Telegram 認証情報は**パスの途中** /bot<token>/sendMessage
 //
-// 想「只保留有用部分」就得按渠道打补丁，而漏掉任何一家就是一次凭据泄露。
-// 保留 host 已经够用于排查（DNS 解析不了、连不上、证书不对都能定位），
-// 具体是哪个机器人由渠道配置里的掩码尾号提示去认。
+// 「役に立つ部分だけ残す」にはチャネルごとに手当てが要り、どこか1社でも漏らせばそれが認証情報の漏洩になる。
+// host を残せば調査には十分で（DNS で解決できない、つながらない、証明書が違う、のいずれも突き止められる）、
+// どのボットかはチャネル設定のマスクされた末尾の文字で見分ける。
 //
-// 解析失败时返回固定占位符——绝不把原始串回显出去。
+// 解析に失敗したら固定のプレースホルダーを返す——元の文字列は決して返さない。
 func redactRequestTarget(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {
@@ -210,11 +210,11 @@ func redactRequestTarget(raw string) string {
 	return u.Scheme + "://" + u.Host + "/…"
 }
 
-// redactTransportError 从传输层错误里剥掉地址，只保留底层原因。
+// redactTransportError は伝送層のエラーからアドレスを取り除き、下層の原因だけを残す。
 //
-// *url.Error 的结构是 {Op, URL, Err}，Error() 会把 URL 一起打出来。
-// 这里显式取 Err 字段，绕开它的 Error() ——比事后做字符串替换更可靠，
-// 因为替换要正确应对 URL 编码/转义后的各种变体，容易漏。
+// *url.Error の構造は {Op, URL, Err} で、Error() は URL も一緒に出力する。
+// ここでは明示的に Err フィールドを取り、その Error() を避ける——あとから文字列を置換するより確実だ。
+// 置換では URL エンコードやエスケープのさまざまな変形に正しく対応する必要があり、漏れやすいからだ。
 func redactTransportError(err error) string {
 	var uerr *url.Error
 	if errors.As(err, &uerr) {
@@ -227,14 +227,14 @@ func redactTransportError(err error) string {
 		}
 		return fmt.Sprintf("%s %s: 알 수 없는 오류", uerr.Op, host)
 	}
-	// 非 *url.Error（如重定向策略返回的错误）也可能带地址，统一走脱敏。
+	// *url.Error でないもの（リダイレクトのポリシーが返すエラーなど）もアドレスを含みうるので、まとめて秘匿化する。
 	return redactURLsInText(err.Error())
 }
 
-// redactURLsInText 把一段文本里出现的 http(s) 地址替换成脱敏形态。
+// redactURLsInText は文章の中に現れる http(s) のアドレスを秘匿化した形に置き換える。
 //
-// 用于兜底那些拿不到结构化字段的错误（重定向策略错误、第三方库的自定义错误）。
-// 只识别 http/https 前缀，按空白与引号切分——地址不会包含这两类字符。
+// 構造化されたフィールドを取れないエラー（リダイレクトのポリシーのエラー、外部ライブラリの独自エラー）の最後の受け皿に使う。
+// http/https の接頭辞だけを認識し、空白と引用符で区切る——アドレスにこの2種類の文字は含まれない。
 func redactURLsInText(s string) string {
 	var b strings.Builder
 	for i := 0; i < len(s); {

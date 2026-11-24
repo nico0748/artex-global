@@ -32,14 +32,14 @@ import { ConfigField, FilterSummary } from "./_components/channel-form";
 import { DeliveryList } from "./_components/delivery-list";
 import { formatBacklog, StatTile } from "./_components/stat-tile";
 
-// 本页只负责编排：加载数据、维护表单状态、调用接口。
-// 字段定义与解析在 _components/channel-fields.ts，控件与过滤摘要在
-// _components/channel-form.tsx，投递记录在 _components/delivery-list.tsx——
-// 拆开是因为它们各自能被单独读懂，而挤在一个文件里时这个页面接近 1100 行。
+// このページは組み立てだけを受け持つ：データを読み込み、フォームの状態を保ち、インターフェースを呼ぶ。
+// フィールドの定義と解析は _components/channel-fields.ts、部品と絞り込みの要約は
+// _components/channel-form.tsx、配信の記録は _components/delivery-list.tsx にある——
+// 分けたのは、それぞれ単独で読み解けるからで、1つのファイルに詰め込むとこのページは 1100 行近くになる。
 export default function NotifyPage() {
   const t = useTranslations("notifyPage");
-  // 渠道类型展示名：已知的 6 种走 i18n（notifyPage.kind.<kind>），
-  // 后端若回传未知类型则原样显示该 key（保留原来的 `?? ch.kind` 语义）。
+  // チャンネルの種類の表示名：知っている 6 種類は i18n（notifyPage.kind.<kind>）を通し、
+  // バックエンドが知らない種類を返したらその key をそのまま表示する（元の `?? ch.kind` の意味を残す）。
   const kindLabel = (k: string) => (k in CHANNEL_FIELDS ? t(`kind.${k}`) : k);
   const [meta, setMeta] = React.useState<NotificationMeta | null>(null);
   const [channels, setChannels] = React.useState<NotificationChannel[]>([]);
@@ -64,8 +64,8 @@ export default function NotifyPage() {
         setDigestMin(m.digest_interval_min);
       })
       .catch((e) => toast.error(t("toast.loadConfigFailed", { msg: (e as Error).message })));
-    // 渠道列表加载失败要报出来：静默失败会显示成「一个渠道都没有」，
-    // 用户会以为配置丢了，比直接报错更让人慌。
+    // チャンネルの一覧の読み込みの失敗は知らせなければならない：黙って失敗すると「チャンネルが1つもない」と表示され、
+    // ユーザーは設定が消えたと思い、直接エラーを出すより慌てさせる。
     api
       .notifyChannels()
       .then(setChannels)
@@ -90,7 +90,7 @@ export default function NotifyPage() {
 
   function openEdit(ch: NotificationChannel) {
     setEditing(ch);
-    // filter 在后端是 Go 结构体，永远序列化成对象（不会是 null），所以不需要兜底。
+    // filter はバックエンドでは Go の構造体で、いつもオブジェクトにシリアライズされる（null にはならない）ので、支えは要らない。
     const f = ch.filter;
     setForm({
       name: ch.name,
@@ -98,8 +98,8 @@ export default function NotifyPage() {
       mode: ch.mode,
       enabled: ch.enabled,
       ratePerMin: String(ch.rate_per_min),
-      // 后端回显的 config 里凭据是掩码值；原样放进表单，提交时原样送回，
-      // 后端据此保留库中原值。
+      // バックエンドが返した config の資格情報はマスクした値；そのままフォームに入れ、送るときにそのまま送り返すと、
+      // バックエンドはそれをもとに DB の元の値を残す。
       config: { ...ch.config },
       minSeverity: f.min_severity ?? "",
       includeText: (f.vulnclass_include ?? []).join("\n"),
@@ -111,17 +111,17 @@ export default function NotifyPage() {
     setOpen(true);
   }
 
-  // buildConfig 把表单状态转成渠道 config。
+  // buildConfig はフォームの状態をチャンネルの config にする。
   //
-  // 唯一的规则，两类值：
-  //   - 掩码值（"__masked__..."）原样送回 → 后端解读为「这个字段没改，保留库中原值」
-  //   - 其余一律按用户输入提交，空串即「清空该字段」
+  // 規則はひとつで、値は2種類：
+  //   - マスクした値（"__masked__..."）はそのまま送り返す → バックエンドは「このフィールドは変えていないので、DB の元の値を残す」と読む
+  //   - ほかは一律にユーザーの入力どおりに送り、空の文字列は「そのフィールドを空にする」
   //
-  // 之所以不特殊照顾凭据字段（比如「凭据留空就跳过」），是因为那会让用户**无法清除**
-  // 一个设错的密钥——界面上没有任何操作能表达「我要把它删掉」。现在的规则下，
-  // 清空输入框就等于清空该字段，语义唯一且用户可控。
-  // 掩码值不会出现在输入框里（见 ConfigField），所以「框里有字」永远等于
-  // 「用户主动填的」。
+  // 資格情報のフィールドを特別扱いしない（例えば「資格情報が空なら飛ばす」）のは、そうするとユーザーが誤って設定した鍵を**消せなく**
+  // なるから——画面に「それを消したい」を表す操作が何もない。いまの規則なら、
+  // 入力欄を空にすればそのフィールドを空にすることになり、意味は1つで、ユーザーが制御できる。
+  // マスクした値は入力欄に現れない（ConfigField を参照）ので、「欄に文字がある」は常に
+  // 「ユーザーが自分で入れた」と同じ。
   function buildConfig(): Record<string, unknown> {
     const defs = CHANNEL_FIELDS[form.kind] ?? [];
     const out: Record<string, unknown> = {};
@@ -207,7 +207,7 @@ export default function NotifyPage() {
       const r = await api.notifyTestChannel(editing.id);
       toast.success(t("toast.testSent", { ms: r.latency_ms }));
     } catch (e) {
-      // 后端把渠道返回的原始错误如实回传，这是排查配置的唯一线索，原样展示。
+      // バックエンドはチャンネルが返した元のエラーをありのままに送り返す。これは設定を調べる唯一の手がかりなので、そのまま表示する。
       toast.error(t("toast.testFailed", { msg: (e as Error).message }), { duration: 12000 });
     } finally {
       setTesting(false);
@@ -275,8 +275,8 @@ export default function NotifyPage() {
           <p className="text-muted-foreground text-sm">{t("subtitle")}</p>
         </div>
         {meta && (
-          // 用 div 而不是 label：Switch 自带 aria-label，外面再套一层 label
-          // 既关联不到任何原生控件，又会让点击文字看起来应该能切换。
+          // label ではなく div を使う：Switch は自分の aria-label を持ち、外にもう一層 label をかぶせると
+          // どのネイティブの部品にも結びつかないうえ、文字を押せば切り替わりそうに見えてしまう。
           <div className="flex shrink-0 items-center gap-2 text-sm">
             <span className="text-muted-foreground">{t("globalSwitch")}</span>
             <Switch
@@ -306,7 +306,7 @@ export default function NotifyPage() {
           <StatTile
             label={t("stats.backlog")}
             value={formatBacklog(meta.stats.backlog_age_ms, t)}
-            // 积压年龄比积压条数有用得多：积压 3 条可以是从 3 秒到 3 小时。
+            // 溜まりの経過時間は溜まりの件数よりずっと役に立つ：溜まりが 3 件でも、3 秒前からなのか 3 時間前からなのかがありうる。
             hint={meta.stats.backlog_age_ms > 5 * 60_000 ? t("stats.backlogStuck") : undefined}
             tone={meta.stats.backlog_age_ms > 5 * 60_000 ? "red" : undefined}
           />
@@ -376,10 +376,10 @@ export default function NotifyPage() {
                   <div className="flex items-center gap-2">
                     <BellIcon className="text-muted-foreground size-4 shrink-0" />
                     <CardTitle className="truncate text-base">{ch.name}</CardTitle>
-                    {/* 卡片整体可点（进入编辑），所以这两个控件必须各自吞掉冒泡，
-                        否则开关/删除会顺带触发编辑。把 stopPropagation 挂在控件自己
-                        身上，而不是套一层 div：套 div 会造出一个「看起来可交互但没有
-                        角色」的静态元素，既触发 a11y 告警，语义上也说不通。 */}
+                    {/* カードは全体を押せる（編集に入る）ので、この2つの部品はそれぞれ伝播を飲み込まなければならない。
+                        さもないと切り替え/削除がついでに編集を起こす。stopPropagation は部品自身に
+                        付け、div をかぶせない：div をかぶせると「やり取りできそうに見えるのに
+                        役割がない」静的な要素ができ、a11y の警告が出るうえ、意味の上でも通らない。 */}
                     <div className="ml-auto flex items-center gap-2">
                       <Switch
                         checked={ch.enabled}
@@ -393,8 +393,8 @@ export default function NotifyPage() {
                         aria-label={t("aria.delete")}
                         onClick={(e) => {
                           e.stopPropagation();
-                          // void 显式丢弃 Promise：removeChannel 自己 catch 并 toast，
-                          // 这里不需要 await（onClick 不是 async）。
+                          // void で Promise を明示的に捨てる：removeChannel が自分で catch して toast するので、
+                          // ここで await する必要はない（onClick は async ではない）。
                           void removeChannel(ch);
                         }}
                       >
@@ -438,7 +438,7 @@ export default function NotifyPage() {
                 <Select
                   value={form.kind}
                   onValueChange={(v) => {
-                    // 换类型等于换一套凭据字段，不能把旧配置合并进来。
+                    // 種類を換えるのは資格情報のフィールドの組を換えることなので、古い設定を混ぜてはならない。
                     setF({ kind: v, config: {} });
                   }}
                   disabled={!!editing}

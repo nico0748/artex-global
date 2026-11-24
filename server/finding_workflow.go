@@ -37,7 +37,7 @@ func (s *Server) seedFindingWorkflowTools() {
 	if value, _, _ := s.m.pg.GetSetting(hostSearchDescriptionFlag); value != "true" {
 		// Only replace the original built-in text. A user-edited description is
 		// authoritative and must survive upgrades.
-		legacy := "查询记录代理已抓取的目标流量（必须指定 host，可再按 URL 子串或正文关键词过滤）。body_contains 会在已抓取的请求/响应头与正文中做全文搜索，支持任意子串和中文（至少 3 个字符），可用来找响应里的密码、密钥、报错、内网地址等。仅返回极轻量索引(id/method/url/status/resp_len)，不含任何响应内容。默认只返回 3 条、每页最多 10 条；结果多时用 page 翻页（page=0 起）；要看某条的请求/响应原文用 traffic_get(id)。回看已访问资源、找端点先用它，避免重复 curl 同一 URL。"
+		legacy := "記録用のプロキシが取得した対象の通信を調べる（host の指定は必須で、さらに URL の部分文字列か本文のキーワードで絞り込める）。body_contains は取得したリクエスト/レスポンスのヘッダーと本文を全文検索し、任意の部分文字列と日本語/中国語（3 文字以上）に対応するので、レスポンスの中のパスワード、鍵、エラー、社内のアドレスなどを探せる。返すのはごく軽い索引(id/method/url/status/resp_len)だけで、レスポンスの内容は一切含まない。既定では 3 件だけを返し、1ページは最大 10 件；結果が多ければ page でページを送る（page=0 から）；ある件のリクエスト/レスポンスの原文を見るには traffic_get(id) を使う。アクセス済みの資源の振り返りやエンドポイントの探索にはまずこれを使い、同じ URL を何度も curl しないこと。"
 		if _, err := s.m.pg.Exec(`UPDATE tools SET description=$1,updated_at=now() WHERE key='traffic_search' AND system AND description=$2`, traffic.TrafficSearchDescription, legacy); err != nil {
 			// Log and leave the flag unset so the next startup retries; do not
 			// return, or a transient error here would also skip the reporter
@@ -72,7 +72,7 @@ func (s *Server) seedFindingWorkflowTools() {
 		props := objectProperty(schema, "properties")
 		if key == "report_finding" {
 			if _, exists := props["evidence_hint_id"]; !exists {
-				props["evidence_hint_id"] = map[string]any{"type": "integer", "description": "可选：本任务中对应此漏洞的 hint ID；读取该提示保存的 traffic_refs 一并绑定，无提示时省略"}
+				props["evidence_hint_id"] = map[string]any{"type": "integer", "description": "任意：このタスクでこの脆弱性に対応する hint の ID；そのヒントが保存した traffic_refs を読み、一緒に結びつける。ヒントがなければ省く"}
 			}
 		} else {
 			if _, exists := props["traffic_refs"]; !exists {
@@ -87,7 +87,7 @@ func (s *Server) seedFindingWorkflowTools() {
 				items["type"] = "object"
 			}
 			itemProps := objectProperty(items, "properties")
-			for name, value := range map[string]any{"text": strParam("提示内容"), "asset_ids": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}}, "traffic_refs": agent.HintTrafficSchema()} {
+			for name, value := range map[string]any{"text": strParam("ヒントの内容"), "asset_ids": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}}, "traffic_refs": agent.HintTrafficSchema()} {
 				if _, exists := itemProps[name]; !exists {
 					itemProps[name] = value
 				}
@@ -135,37 +135,37 @@ func objectProperty(parent map[string]any, key string) map[string]any {
 
 func (s *Server) agentFindingTrafficAccess(ctx context.Context, id int64, write bool) error {
 	if id <= 0 {
-		return errors.New("finding_id 必须为独立漏洞记录 ID；不是探索节点 ID")
+		return errors.New("finding_id は独立した脆弱性の記録 ID でなければならない；探索ノードの ID ではない")
 	}
 	f, err := s.m.pg.GetFinding(id)
 	if err != nil {
 		return err
 	}
 	if f == nil {
-		return fmt.Errorf("%w：finding_id=%d。证据工具使用独立漏洞记录 ID，请从 list_task_findings / get_task_node_detail 的 finding_id 字段读取；不要传 id / finding_node_id", db.ErrFindingNotFound, id)
+		return fmt.Errorf("%w：finding_id=%d。証拠のツールは独立した脆弱性の記録 ID を使うので、list_task_findings / get_task_node_detail の finding_id フィールドから読むこと；id / finding_node_id を渡さないこと", db.ErrFindingNotFound, id)
 	}
 	if ri := agent.RunInfoFrom(ctx); ri.TaskID > 0 {
 		task := s.m.ResolveTask(strconv.FormatInt(ri.TaskID, 10))
 		if task == nil {
-			return errors.New("任务不存在")
+			return errors.New("タスクが存在しない")
 		}
 		_, inherited, allowed := findingProvenanceInTask(task, f.TaskID)
 		if !allowed {
-			return errors.New("当前任务不可读取该漏洞")
+			return errors.New("現在のタスクではこの脆弱性を読めない")
 		}
 		if write && inherited {
-			return errors.New("继承漏洞的流量证据只读，请到来源任务修改")
+			return errors.New("引き継いだ脆弱性の通信の証拠は読み取り専用なので、元のタスクで変えること")
 		}
 	}
 	return nil
 }
 
 func (s *Server) toolBindFindingTraffic() actool.CoreTool {
-	return wrTool("bind_finding_traffic", "为已登记漏洞补绑经核实的真实 HTTP 流量。finding_id 使用独立漏洞记录 ID；不要传探索节点 ID。同批引用全部成功或全部失败，重复引用不覆盖已有说明。补绑会使已有报告标记待更新；不要为补包重新探测或重复创建漏洞。",
-		objSchema(map[string]any{"finding_id": strParam("独立漏洞记录 ID，从 list_task_findings / get_task_node_detail 的 finding_id 字段读取"), "traffic_refs": agent.HintTrafficSchema()}, "finding_id", "traffic_refs"),
+	return wrTool("bind_finding_traffic", "登録済みの脆弱性に、確かめた本物の HTTP の通信を後から結びつける。finding_id には独立した脆弱性の記録 ID を使い、探索ノードの ID を渡さないこと。同じ一括の参照はすべて成功するかすべて失敗するかで、重ねた参照は既存の説明を上書きしない。後から結びつけると既存の報告に更新待ちの印が付く；パケットを補うために探査し直したり、脆弱性を重ねて作ったりしないこと。",
+		objSchema(map[string]any{"finding_id": strParam("独立した脆弱性の記録 ID。list_task_findings / get_task_node_detail の finding_id フィールドから読む"), "traffic_refs": agent.HintTrafficSchema()}, "finding_id", "traffic_refs"),
 		func(ctx context.Context, raw json.RawMessage) (actool.Result, error) {
 			if !s.m.pg.GetBool(settingAgentTrafficBinding, false) {
-				return actool.Errorf("Agent 自动绑定流量已关闭；请在系统设置开启，或使用页面人工绑定。"), nil
+				return actool.Errorf("Agent による通信の自動の結びつけはオフになっている；システム設定でオンにするか、ページで人が結びつけること。"), nil
 			}
 			var args struct {
 				FindingID json.RawMessage `json:"finding_id"`
@@ -179,7 +179,7 @@ func (s *Server) toolBindFindingTraffic() actool.CoreTool {
 				return actool.Errorf(err.Error()), nil
 			}
 			if len(args.Refs) == 0 {
-				return actool.Errorf("补绑需要至少一条已核实的 traffic_refs；无流量无需调用此工具"), nil
+				return actool.Errorf("後から結びつけるには確かめ済みの traffic_refs が少なくとも1件必要；通信がなければこのツールを呼ぶ必要はない"), nil
 			}
 			list, err := s.evidenceStore().Bind(ctx, id, args.Refs)
 			if err != nil {

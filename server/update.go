@@ -14,11 +14,11 @@ import (
 	"github.com/Autumn-27/artex/selfupdate"
 )
 
-// 页面一键更新的 HTTP 面。真正的下载/校验/换装逻辑全在 selfupdate 包里，
-// 这里只负责鉴权边界、并发互斥、进度广播，以及把"该退出了"告诉 main。
+// ページからのワンクリックの更新の HTTP の面。本当のダウンロード/検証/入れ替えのロジックはすべて selfupdate パッケージにあり、
+// ここは認証の境界、同時実行の排他、進み具合の配信、そして「もう終了してよい」と main に伝えることだけを受け持つ。
 //
-// 重启不由本进程完成：暂存好新版本后进程以 selfupdate.ExitRestart 退出，
-// 由守护脚本（start.sh / start.bat，Docker 下是 ENTRYPOINT）重新拉起。
+// 再起動はこのプロセスでは行わない：新しい版を一時保存したら、プロセスは selfupdate.ExitRestart で終了し、
+// 見張りのスクリプト（start.sh / start.bat。Docker では ENTRYPOINT）が起動し直す。
 
 // 사용자에게 노출되는 업데이트 메시지(SSE 진행 메시지·검사 사유·에러 응답).
 // 프런트엔드(system/settings 의 update-card)가 progress.message·reason·writeErr
@@ -33,25 +33,25 @@ const (
 	updateErrRollbackInProgress = "업데이트가 진행 중이어서 롤백할 수 없습니다"
 )
 
-// restartCh 在升级就绪或回滚完成后关闭，main 收到后以 ExitRestart 退出。
+// restartCh はアップグレードの準備ができたか、ロールバックが終わったら閉じ、main はそれを受けて ExitRestart で終了する。
 var (
 	restartOnce sync.Once
 	restartCh   = make(chan struct{})
 )
 
-// RestartRequested 返回一个在"请退出并让守护进程重新拉起我"时关闭的 channel。
+// RestartRequested は「終了して見張りのプロセスに起動し直させてほしい」ときに閉じる channel を返す。
 func RestartRequested() <-chan struct{} { return restartCh }
 
 func requestRestart() { restartOnce.Do(func() { close(restartCh) }) }
 
-// bootState 是本次启动时 selfupdate.Bootstrap 的结论（升级成功 / 刚回滚 /
-// 暂存件被丢弃），由 main 注入，供 /api/update/check 如实告诉前端上一次升级的下场。
+// bootState は今回の起動時の selfupdate.Bootstrap の結論（アップグレードに成功 / ロールバックしたばかり /
+// 一時保存したものを捨てた）で、main が注入し、/api/update/check が前回のアップグレードの結果をありのままにフロントエンドに伝えるのに使う。
 var (
 	bootStateMu sync.Mutex
 	bootState   selfupdate.State
 )
 
-// SetBootUpdateState 由 main 在启动时调用一次。
+// SetBootUpdateState は main が起動時に1回呼ぶ。
 func SetBootUpdateState(st selfupdate.State) {
 	bootStateMu.Lock()
 	defer bootStateMu.Unlock()
@@ -64,35 +64,35 @@ func bootUpdateState() selfupdate.State {
 	return bootState
 }
 
-// releaseCache 缓存 GitHub 的最新版本查询结果。
+// releaseCache は GitHub の最新版の検索の結果をキャッシュする。
 //
-// 顶栏的"有新版本"提示会在每次整页加载时查一次，而未认证的 GitHub API 是
-// 每 IP 每小时 60 次——不缓存的话，多开几个标签页或刷几次页面就把配额耗光了，
-// 之后真想更新时反而查不动。用户显式点"检查更新"时可以 force 绕过缓存。
+// 上部のバーの「新しい版がある」の案内はページ全体を読み込むたびに1回調べるが、認証していない GitHub の API は
+// IP ごとに1時間 60 回まで——キャッシュしないと、タブをいくつか開いたりページを何回か更新したりしただけで枠を使い切り、
+// その後本当に更新したいときにかえって調べられなくなる。ユーザーが明示的に「更新を確認」を押したときは force でキャッシュを迂回できる。
 type releaseCache struct {
 	mu  sync.Mutex
 	rel *selfupdate.Release
 	err error
 	at  time.Time
-	// fetch 是取数函数，仅为测试留的注入点；为 nil 时走真正的 GitHub 查询。
+	// fetch はデータを取る関数で、テストのためだけの注入口；nil なら本物の GitHub の検索を通る。
 	fetch func(context.Context, *http.Client) (*selfupdate.Release, error)
 }
 
 const (
 	releaseTTL = 30 * time.Minute
-	// 失败结果也缓存一小会儿，否则 GitHub 不可达时每次页面加载都要干等一次超时；
-	// 但 TTL 要短，网络恢复后很快就能自己好。
+	// 失敗の結果も少しの間キャッシュする。さもないと GitHub に届かないとき、ページを読み込むたびにタイムアウトを1回待たされる；
+	// ただし TTL は短くし、ネットワークが戻ったらすぐ自然に直るようにする。
 	releaseErrTTL = 2 * time.Minute
-	// 查询用的超时。NewClient 的 30 分钟超时是给下载整包用的，查版本不能等那么久。
+	// 検索に使うタイムアウト。NewClient の 30 分のタイムアウトは丸ごとのダウンロード用で、版を調べるのにそこまでは待てない。
 	releaseTimeout = 20 * time.Second
 )
 
 var relCache = &releaseCache{}
 
-// get 返回最新 Release，命中缓存则不访问网络。
+// get は最新の Release を返し、キャッシュに当たればネットワークにはアクセスしない。
 //
-// 取数期间一直持有锁：并发请求会排队等同一次查询的结果，而不是各自去打 GitHub
-// （页面刚加载时多个标签页同时来查，正是最容易触发限流的时刻）。
+// データを取る間ずっとロックを持つ：同時のリクエストは同じ1回の検索の結果を並んで待ち、それぞれが GitHub をたたくことはない
+// （ページを読み込んだばかりで複数のタブが同時に調べに来るときが、まさにレート制限に最も当たりやすい）。
 func (c *releaseCache) get(ctx context.Context, client *http.Client, force bool) (*selfupdate.Release, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -114,8 +114,8 @@ func (c *releaseCache) get(ctx context.Context, client *http.Client, force bool)
 	ctx, cancel := context.WithTimeout(ctx, releaseTimeout)
 	defer cancel()
 	rel, err := fetch(ctx, client)
-	// 请求被取消（用户关了标签页）不代表 GitHub 有问题，别把它写进缓存，
-	// 否则下一个访客会拿到一条莫名其妙的"已取消"错误。
+	// リクエストが取り消された（ユーザーがタブを閉じた）からといって GitHub に問題があるわけではないので、キャッシュに書かない。
+	// さもないと次の訪問者が「取り消された」という訳のわからないエラーを受け取る。
 	if err != nil && ctx.Err() != nil && errors.Is(ctx.Err(), context.Canceled) {
 		return c.rel, err
 	}
@@ -123,19 +123,19 @@ func (c *releaseCache) get(ctx context.Context, client *http.Client, force bool)
 	return rel, err
 }
 
-// updateProgress 是推给前端的一条进度。
+// updateProgress はフロントエンドに送る進み具合の1件。
 type updateProgress struct {
 	Phase   selfupdate.Phase `json:"phase"`
-	Percent int              `json:"percent"` // 仅下载阶段有意义；其余为 -1
+	Percent int              `json:"percent"` // ダウンロードの段階でだけ意味がある；他は -1
 	Message string           `json:"message"`
 	Version string           `json:"version,omitempty"`
 	Error   string           `json:"error,omitempty"`
 }
 
-// updateHub 持有一次升级的进度并广播给 SSE 订阅者。
+// updateHub は1回のアップグレードの進み具合を持ち、SSE の購読者に配信する。
 //
-// running 同时充当互斥：升级期间再次 POST /api/update/apply 直接 409，
-// 避免两个 goroutine 同时往同一个 artex.new 写。
+// running は排他も兼ねる：アップグレード中にもう一度 POST /api/update/apply したらそのまま 409 にし、
+// 2つの goroutine が同じ artex.new に同時に書くのを避ける。
 type updateHub struct {
 	mu      sync.Mutex
 	running bool
@@ -148,7 +148,7 @@ var updHub = &updateHub{
 	subs: map[chan updateProgress]struct{}{},
 }
 
-// begin 抢占升级权限，已在进行中则返回 false。
+// begin はアップグレードの権利を取る。すでに進行中なら false を返す。
 func (h *updateHub) begin(version string) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -161,7 +161,7 @@ func (h *updateHub) begin(version string) bool {
 	return true
 }
 
-// finish 结束一次升级。err 为 nil 表示暂存成功，等待重启。
+// finish は1回のアップグレードを終える。err が nil なら一時保存に成功し、再起動を待っていることを表す。
 func (h *updateHub) finish(err error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -181,8 +181,8 @@ func (h *updateHub) publish(ph selfupdate.Phase, pct int, msg string) {
 	h.fanout(h.cur)
 }
 
-// fanout 必须在持有 h.mu 时调用。订阅者 channel 是有缓冲的，满了就丢——
-// 进度是可丢弃的瞬时信息，绝不能让一个卡住的 SSE 连接阻塞升级本身。
+// fanout は h.mu を持っているときに呼ばなければならない。購読者の channel はバッファ付きで、満杯なら捨てる——
+// 進み具合は捨ててよい一時的な情報で、詰まった SSE の接続1つにアップグレードそのものを止めさせては決してならない。
 func (h *updateHub) fanout(p updateProgress) {
 	for ch := range h.subs {
 		select {
@@ -214,12 +214,12 @@ func (h *updateHub) subscribe() (<-chan updateProgress, func()) {
 	}
 }
 
-// updateCheck 查询 GitHub 上的最新正式版并与当前版本比较。
+// updateCheck は GitHub の最新の正式版を調べて現在の版と比べる。
 //
-// 前端也会直连 api.github.com（GitHub 的 CORS 是 *），但**以本接口为准**：
-// 下载是后端做的，只有后端能访问 GitHub 才谈得上更新。浏览器能连、服务器连不上
-// 的情况很常见（服务器在内网、或代理只配在浏览器上），那时点更新必然失败，
-// 不如在检查这一步就如实报错。
+// フロントエンドも api.github.com に直接つなぐ（GitHub の CORS は *）が、**このインターフェースを正とする**：
+// ダウンロードはバックエンドが行うので、バックエンドが GitHub にアクセスできてはじめて更新の話になる。ブラウザーはつながるのにサーバーはつながらない
+// ことはよくある（サーバーが社内ネットワークにある、またはプロキシをブラウザーにだけ設定した）ので、そのとき更新を押せば必ず失敗する。
+// それなら確認の段階でありのままにエラーを返すほうがよい。
 func (s *Server) updateCheck(w http.ResponseWriter, r *http.Request) {
 	current := BuildVersion
 	mode := "binary"
@@ -238,7 +238,7 @@ func (s *Server) updateCheck(w http.ResponseWriter, r *http.Request) {
 		"rolled_back": boot.RolledBack,
 	}
 
-	// 顶栏提示走缓存（默认）；用户点"检查更新"时带 force=1 强制回源。
+	// 上部のバーの案内はキャッシュを通る（既定）；ユーザーが「更新を確認」を押したときは force=1 で強制的に元から取る。
 	force := r.URL.Query().Get("force") != ""
 	client := selfupdate.NewClient(s.m.GlobalProxy())
 	rel, err := relCache.get(r.Context(), client, force)
@@ -269,21 +269,21 @@ func (s *Server) updateCheck(w http.ResponseWriter, r *http.Request) {
 	out["comparable"] = comparable
 	out["has_update"] = comparable && cmp < 0
 	if !comparable {
-		// 开发构建（dev / git describe 带后缀）没有可比较的版本号。放行只会
-		// 用正式版覆盖掉本地正在调试的二进制，所以直接不给更新。
+		// 開発用のビルド（dev / git describe に接尾辞が付く）には比べられる版番号がない。通しても
+		// ローカルでデバッグ中のバイナリを正式版で上書きするだけなので、そもそも更新させない。
 		out["reason"] = fmt.Sprintf(updateErrNotReleaseFmt, current)
 	}
 	writeJSON(w, 200, out)
 }
 
-// updateApply 下载并暂存新版本，完成后让进程退出交给守护脚本重启。
+// updateApply は新しい版をダウンロードして一時保存し、終わったらプロセスを終了させて見張りのスクリプトに再起動を任せる。
 //
-// 立刻返回 202，实际工作在后台 goroutine 上跑：整包下载可能要几分钟，
-// 挂在请求上会被反代超时掐断。进度走 /api/update/stream。
+// すぐに 202 を返し、実際の作業はバックグラウンドの goroutine で動く：丸ごとのダウンロードには数分かかることがあり、
+// リクエストにぶら下げるとリバースプロキシのタイムアウトで切られる。進み具合は /api/update/stream を通る。
 func (s *Server) updateApply(w http.ResponseWriter, r *http.Request) {
 	current := BuildVersion
 
-	// 走缓存：确保装上的就是用户在界面上看到并确认的那个版本。
+	// キャッシュを通る：インストールするのが、ユーザーが画面で見て確認したその版であることを保証する。
 	client := selfupdate.NewClient(s.m.GlobalProxy())
 	rel, err := relCache.get(r.Context(), client, false)
 	if err != nil {
@@ -305,18 +305,18 @@ func (s *Server) updateApply(w http.ResponseWriter, r *http.Request) {
 	}
 
 	go func() {
-		// 刻意用 s.ctx 而不是请求的 ctx：HTTP 响应一返回请求就结束了，
-		// 挂在它上面下载会立刻被取消。
+		// あえてリクエストの ctx ではなく s.ctx を使う：HTTP のレスポンスを返すとすぐリクエストは終わり、
+		// それにぶら下げたダウンロードはすぐ取り消されてしまう。
 		err := selfupdate.Stage(s.ctx, client, rel, current, func(ph selfupdate.Phase, pct int, msg string) {
 			updHub.publish(ph, pct, msg)
 		})
 		updHub.finish(err)
 		if err != nil {
-			log.Printf("[update] 更新失败：%v", err)
+			log.Printf("[update] 更新に失敗：%v", err)
 			return
 		}
-		log.Printf("[update] %s → %s 已暂存，即将退出以完成换装", current, rel.TagName)
-		// 留一点时间把最后一条进度推给前端，再触发退出。
+		log.Printf("[update] %s → %s を一時保存した。入れ替えを終えるためにまもなく終了する", current, rel.TagName)
+		// 最後の進み具合をフロントエンドに送る時間を少し残してから、終了を起動する。
 		time.Sleep(1500 * time.Millisecond)
 		requestRestart()
 	}()
@@ -324,7 +324,7 @@ func (s *Server) updateApply(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 202, map[string]any{"ok": true, "target": rel.TagName})
 }
 
-// updateRollback 主动退回上一版本（换装前备份的 artex.old）。
+// updateRollback は自分から前の版（入れ替えの前にバックアップした artex.old）に戻す。
 func (s *Server) updateRollback(w http.ResponseWriter, r *http.Request) {
 	if _, running := updHub.snapshot(); running {
 		writeErr(w, 409, updateErrRollbackInProgress)
@@ -334,7 +334,7 @@ func (s *Server) updateRollback(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, err.Error())
 		return
 	}
-	log.Printf("[update] 已手动回滚到上一版本，即将退出以完成切换")
+	log.Printf("[update] 手動で前の版にロールバックした。切り替えを終えるためにまもなく終了する")
 	writeJSON(w, 202, map[string]any{"ok": true})
 	go func() {
 		time.Sleep(500 * time.Millisecond)
@@ -342,7 +342,7 @@ func (s *Server) updateRollback(w http.ResponseWriter, r *http.Request) {
 	}()
 }
 
-// updateStream 以 SSE 推送更新进度。
+// updateStream は SSE で更新の進み具合を送る。
 func (s *Server) updateStream(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -362,7 +362,7 @@ func (s *Server) updateStream(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "data: %s\n\n", b)
 		flusher.Flush()
 	}
-	// 先补一条当前状态，页面刷新后能立刻看到进行中的升级。
+	// まず現在の状態を1件補い、ページを更新した後も進行中のアップグレードがすぐ見えるようにする。
 	cur, _ := updHub.snapshot()
 	send(cur)
 

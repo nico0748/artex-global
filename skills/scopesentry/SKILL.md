@@ -1,86 +1,86 @@
 ---
 
 ## name: scopesentry-mcp
-description: 通过 ScopeSentry MCP 管理安全扫描平台（项目、任务、模板、资产、节点）。在用户提到 ScopeSentry、MCP、API Key、扫描任务、资产查询时使用。
+description: ScopeSentry MCP でセキュリティスキャンのプラットフォーム（プロジェクト、タスク、テンプレート、資産、ノード）を管理する。ユーザーが ScopeSentry、MCP、API Key、スキャンのタスク、資産の検索に触れたときに使う。
 
-# ScopeSentry MCP 使用指南
+# ScopeSentry MCP の使い方
 
-面向**已部署 ScopeSentry 实例**的用户。通过 Cursor（或其他 MCP 客户端）连接平台，无需本地源码。
+**ScopeSentry のインスタンスを配備済み**のユーザー向け。Cursor（またはほかの MCP クライアント）からプラットフォームにつなぎ、手元のソースは要らない。
 
-## 1. 准备工作
+## 1. 準備
 
-### 1.1 确认服务可访问
+### 1.1 サービスにつながるか確かめる
 
-- 默认 Web 界面：`http://<主机>`
-- MCP 端点：`http://<主机>/mcp`（若前面有反向代理或前端代理，以实际 `/mcp` 地址为准）
+- 既定の Web の画面：`http://<ホスト>`
+- MCP のエンドポイント：`http://<ホスト>/mcp`（前にリバースプロキシやフロントエンドのプロキシがあるなら、実際の `/mcp` のアドレスを正とする）
 
-### 1.2 创建 API Key
+### 1.2 API Key を作る
 
-1. 浏览器登录 ScopeSentry Web 界面
-2. 进入 **API Key** 管理页创建密钥（或通过管理员提供的接口创建）
-3. 保存返回的 `ssk_...` 字符串（**仅显示一次**）
+1. ブラウザーで ScopeSentry の Web の画面にログインする
+2. **API Key** の管理のページで鍵を作る（または管理者が用意したインターフェースで作る）
+3. 返ってきた `ssk_...` の文字列を保存する（**一度しか表示されない**）
 
-### 1.3 配置 Cursor MCP
+### 1.3 Cursor の MCP を設定する
 
-Cursor → Settings → MCP → 添加服务器：
+Cursor → Settings → MCP → サーバーを追加：
 
 ```json
 {
   "mcpServers": {
     "scopesentry": {
-      "url": "http://<你的主机>:8082/mcp",
+      "url": "http://<あなたのホスト>:8082/mcp",
       "headers": {
-        "X-API-Key": "ssk_你的密钥"
+        "X-API-Key": "ssk_あなたの鍵"
       }
     }
   }
 }
 ```
 
-也可使用：`Authorization: Bearer ssk_你的密钥`
+`Authorization: Bearer ssk_あなたの鍵` も使える。
 
-配置完成后重启 MCP 或重载 Cursor，确认工具列表中出现 `list_projects`、`list_assets` 等。
+設定が終わったら MCP を再起動するか Cursor を再読み込みし、ツールの一覧に `list_projects`、`list_assets` などが出ることを確かめる。
 
 ---
 
-## 2. 工具一览
+## 2. ツールの一覧
 
 
-| 工具                     | 用途                |
+| ツール                     | 用途                |
 | ---------------------- | ----------------- |
-| `list_projects`        | 按标签分组的项目树（含项目 ID） |
-| `list_projects_data`   | 分页项目列表，可按名称搜索     |
-| `get_project`          | 项目详情              |
-| `create_project`       | 新建项目              |
-| `list_tasks`           | 扫描任务列表            |
-| `get_task`             | 任务详情              |
-| `list_scan_templates`  | 扫描模板列表            |
-| `get_scan_template`    | 模板详情              |
-| `list_plugin_modules`  | 扫描流水线模块名          |
-| `list_plugins`         | 可用插件（含 hash、默认参数） |
-| `create_scan_template` | 创建扫描模板            |
-| `create_scan_task`     | 创建扫描任务            |
-| `list_assets`          | 查询各类资产（分页列表）       |
-| `count_assets`         | 统计资产数量（`/api/assets/common/total`） |
-| `get_asset_detail`     | 资产或漏洞详情           |
-| `add_asset_tag`        | 为资产添加标签           |
-| `list_nodes`           | 扫描节点列表            |
+| `list_projects`        | タグごとにまとめたプロジェクトのツリー（プロジェクト ID を含む） |
+| `list_projects_data`   | ページ分けしたプロジェクトの一覧。名前で検索できる     |
+| `get_project`          | プロジェクトの詳細              |
+| `create_project`       | プロジェクトを新しく作る              |
+| `list_tasks`           | スキャンのタスクの一覧            |
+| `get_task`             | タスクの詳細              |
+| `list_scan_templates`  | スキャンのテンプレートの一覧            |
+| `get_scan_template`    | テンプレートの詳細              |
+| `list_plugin_modules`  | スキャンのパイプラインのモジュール名          |
+| `list_plugins`         | 使えるプラグイン（hash、既定のパラメータを含む） |
+| `create_scan_template` | スキャンのテンプレートを作る            |
+| `create_scan_task`     | スキャンのタスクを作る            |
+| `list_assets`          | 各種の資産を検索する（ページ分けした一覧）       |
+| `count_assets`         | 資産の数を数える（`/api/assets/common/total`） |
+| `get_asset_detail`     | 資産か脆弱性の詳細           |
+| `add_asset_tag`        | 資産にタグを付ける           |
+| `list_nodes`           | スキャンのノードの一覧            |
 
 
-各工具参数以 MCP 工具描述（schema）为准；`list_assets` / `count_assets` 的 search、filter 语法一致，查询资产前可先阅读 `list_assets` description。
+各ツールのパラメータは MCP のツールの説明（schema）を正とする；`list_assets` / `count_assets` の search、filter の構文は同じなので、資産を検索する前に `list_assets` の description を読むとよい。
 
-需要知道「共多少条」时用 `count_assets`（对应 Web 分页总数接口），不必为了数总数反复翻页 `list_assets`。
+「全部で何件か」を知りたいときは `count_assets`（Web のページ分けの総数のインターフェースに対応）を使い、総数を数えるために `list_assets` のページを何度もめくる必要はない。
 
 ---
 
-## 3. 常用工作流
+## 3. よく使う流れ
 
-### 3.1 按项目查资产
+### 3.1 プロジェクトごとに資産を調べる
 
-当用户或上下文**已有项目条件**时，优先带上 `filter.project` 缩小范围，避免跨项目数据过多导致响应变慢。若无明确项目，可不强制加项目筛选。
+ユーザーか文脈に**プロジェクトの条件がすでにある**ときは、`filter.project` を付けて範囲を絞ることを優先し、プロジェクトをまたいだデータが多すぎて応答が遅くなるのを避ける。はっきりしたプロジェクトがなければ、プロジェクトの絞り込みを無理に付けなくてよい。
 
-1. `list_projects` 或 `list_projects_data` 获取目标项目的 **ObjectID**（`id` / `children[].value`）
-2. `list_assets` 传入 `filter.project`（**必须是 ID，不能写项目中文名**）
+1. `list_projects` か `list_projects_data` で目標のプロジェクトの **ObjectID**（`id` / `children[].value`）を取る
+2. `list_assets` に `filter.project` を渡す（**ID でなければならず、プロジェクトの表示名は書けない**）
 
 ```json
 {
@@ -89,154 +89,154 @@ Cursor → Settings → MCP → 添加服务器：
   "pageSize": 20,
   "search": "domain=^example.com",
   "filter": {
-    "project": ["<项目ObjectID>"]
+    "project": ["<プロジェクトのObjectID>"]
   }
 }
 ```
 
-### 3.2 创建扫描任务
+### 3.2 スキャンのタスクを作る
 
-1. `list_nodes` 获取在线节点名称
-2. `list_scan_templates` 或 `create_scan_template` 获取模板 **ObjectID**
-3. `create_scan_task`：`name`、`node` 必填，`template` 填模板 ID（不能填模板名）
+1. `list_nodes` でオンラインのノードの名前を取る
+2. `list_scan_templates` か `create_scan_template` でテンプレートの **ObjectID** を取る
+3. `create_scan_task`：`name`、`node` は必須、`template` にはテンプレートの ID を入れる（テンプレートの名前は入れられない）
 
-**目标来源 `targetSource`（与 Web 端一致）：**
+**目標の出どころ `targetSource`（Web 側と同じ）：**
 
-| targetSource | 说明 | 必填参数 |
+| targetSource | 説明 | 必須のパラメータ |
 | --- | --- | --- |
-| `general` | 直接输入目标 | `target` |
-| `project` | 从项目读取目标 | `project`（项目 ObjectID 数组） |
-| `asset` | 从 Web 资产库搜索 | `search`；可选 `project`、`filter`、`targetNumber` |
-| `RootDomain` | 从根域名库搜索 | `search`；可选 `project`、`filter`、`targetNumber` |
-| `subdomain` | 从子域名库搜索 | `search`；可选 `project`、`filter`、`targetNumber` |
-| `UrlScan` | 从 URL 扫描结果搜索 | `search`；可选 `project`、`filter`、`targetNumber` |
-| `*Source`（如 `subdomainSource`） | 从资产页「选中/搜索」创建 | `targetTp=search` 时用 `search`；`targetTp=select` 时用 `targetIds` |
+| `general` | 目標を直接入れる | `target` |
+| `project` | プロジェクトから目標を読む | `project`（プロジェクトの ObjectID の配列） |
+| `asset` | Web の資産のライブラリから検索する | `search`；任意で `project`、`filter`、`targetNumber` |
+| `RootDomain` | ルートドメインのライブラリから検索する | `search`；任意で `project`、`filter`、`targetNumber` |
+| `subdomain` | サブドメインのライブラリから検索する | `search`；任意で `project`、`filter`、`targetNumber` |
+| `UrlScan` | URL のスキャンの結果から検索する | `search`；任意で `project`、`filter`、`targetNumber` |
+| `*Source`（例 `subdomainSource`） | 資産のページの「選択/検索」から作る | `targetTp=search` なら `search`；`targetTp=select` なら `targetIds` |
 
-**示例 — 直接扫根域名：**
+**例 — ルートドメインを直接スキャンする：**
 
 ```json
 {
-  "name": "example-子域名收集",
+  "name": "example-サブドメインの収集",
   "node": ["node-1"],
-  "template": "<模板ObjectID>",
+  "template": "<テンプレートのObjectID>",
   "targetSource": "general",
   "target": "example.com\nfoo.com",
-  "project": ["<项目ObjectID>"]
+  "project": ["<プロジェクトのObjectID>"]
 }
 ```
 
-**示例 — 从子域名库续扫（按上一任务名筛选）：**
+**例 — サブドメインのライブラリから続けてスキャンする（前のタスクの名前で絞り込む）：**
 
 ```json
 {
-  "name": "example-端口与漏洞",
+  "name": "example-ポートと脆弱性",
   "node": ["node-1"],
-  "template": "<后续模块模板ObjectID>",
+  "template": "<後続のモジュールのテンプレートのObjectID>",
   "targetSource": "subdomain",
-  "search": "task==\"example-子域名收集\"",
-  "project": ["<项目ObjectID>"]
+  "search": "task==\"example-サブドメインの収集\"",
+  "project": ["<プロジェクトのObjectID>"]
 }
 ```
 
-### 3.3 根域名完整信息收集（推荐两阶段）
+### 3.3 ルートドメインの完全な情報収集（2 段階を勧める）
 
-当输入为**根域名**且要进行**完整信息收集**时，建议分两次扫描，不要一次跑全流水线。
+入力が**ルートドメイン**で**完全な情報収集**をするときは、2 回に分けてスキャンすることを勧め、パイプライン全体を一度に走らせない。
 
-**原因：** 分布式任务以**单个目标**为单位分发。根域名作为目标时，某节点分到该根域名后，在该节点上扫出的子域名也会继续在该节点执行后续模块，容易造成负载不均、速度慢、易出错。
+**理由：** 分散したタスクは**目標 1 つ**を単位に配られる。ルートドメインを目標にすると、あるノードがそのルートドメインを受け取った後、そのノードで見つかったサブドメインも同じノードで後続のモジュールを続けて実行するので、負荷が偏り、遅く、エラーも起きやすい。
 
-**最佳实践：**
+**最善のやり方：**
 
-1. **第一阶段 — 仅子域名收集**
+1. **第 1 段階 — サブドメインの収集だけ**
    - `targetSource`: `general`
-   - `target`: 所有根域名（多行）
-   - 模板：仅启用 `SubdomainScan`、`SubdomainSecurity`（子域名扫描 + 子域名接管）
-   - 用 `get_task` 等待任务完成
+   - `target`: すべてのルートドメイン（複数行）
+   - テンプレート：`SubdomainScan`、`SubdomainSecurity`（サブドメインのスキャン + サブドメインの乗っ取り）だけを有効にする
+   - `get_task` でタスクの完了を待つ
 
-2. **第二阶段 — 后续模块**
+2. **第 2 段階 — 後続のモジュール**
    - `targetSource`: `subdomain`
-   - `search`: `task=="<第一阶段任务名称>"`（精确匹配任务名）
-   - 可选 `project` 缩小范围
-   - 模板：端口扫描、资产测绘、漏洞扫描等（可不含 SubdomainScan）
-   - 子域名作为独立目标分发到各节点，并行效率更高
+   - `search`: `task=="<第 1 段階のタスクの名前>"`（タスクの名前に完全一致）
+   - 任意で `project` で範囲を絞る
+   - テンプレート：ポートスキャン、資産のマッピング、脆弱性スキャンなど（SubdomainScan は含めなくてよい）
+   - サブドメインが独立した目標として各ノードに配られ、並列の効率が上がる
 
-也可在 Web 界面「子域名」资产页按任务名筛选后，使用「从子域名创建任务」，效果相同。
+Web の画面の「サブドメイン」の資産のページでタスクの名前で絞り込んでから、「サブドメインからタスクを作る」を使っても同じ効果になる。
 
 ```mermaid
 flowchart LR
-  A[根域名列表] --> B[阶段1: general + SubdomainScan]
-  B --> C[子域名入库]
-  C --> D[阶段2: subdomain + task==阶段1任务名]
-  D --> E[端口/资产/漏洞等模块]
+  A[ルートドメインの一覧] --> B[段階1: general + SubdomainScan]
+  B --> C[サブドメインを保存]
+  C --> D[段階2: subdomain + task==段階1のタスク名]
+  D --> E[ポート/資産/脆弱性などのモジュール]
 ```
 
-### 3.4 创建扫描模板
+### 3.4 スキャンのテンプレートを作る
 
-1. `list_plugin_modules` → 模块名列表
-2. `list_plugins`（可按 `module` 过滤）→ 各插件 `hash` 与默认 `parameter`
-3. `create_scan_template`：用 `modules` 指定「模块 → 插件 hash 数组」
+1. `list_plugin_modules` → モジュール名の一覧
+2. `list_plugins`（`module` で絞り込める）→ 各プラグインの `hash` と既定の `parameter`
+3. `create_scan_template`：`modules` で「モジュール → プラグインの hash の配列」を指定する
 
 ---
 
-## 4. 资产查询（`list_assets` / `count_assets`）
+## 4. 資産の検索（`list_assets` / `count_assets`）
 
-`count_assets` 与 `list_assets` 使用相同的 `asset_type`、`search`、`filter`，返回 `{ "total": N }`，对应 Web 端 `/api/assets/common/total`。
+`count_assets` は `list_assets` と同じ `asset_type`、`search`、`filter` を使い、`{ "total": N }` を返す。Web 側の `/api/assets/common/total` に対応する。
 
 ```json
 {
   "asset_type": "subdomain",
-  "search": "task==\"某任务名\"",
-  "filter": {"project": ["<项目ObjectID>"]}
+  "search": "task==\"あるタスクの名前\"",
+  "filter": {"project": ["<プロジェクトのObjectID>"]}
 }
 ```
 
-**性能建议（`list_assets` / `count_assets` 通用）：** 有项目条件时优先用 `filter.project` 缩小范围；`search` 中对已建索引字段尽量用 `==` 全等或 `^` 前缀匹配（见 [4.3](#43-search-搜索表达式)），避免大面积 `=` 模糊查询拖慢响应。无项目上下文时不强制加项目筛选。
+**性能の勧め（`list_assets` / `count_assets` で共通）：** プロジェクトの条件があるときは `filter.project` で範囲を絞ることを優先する；`search` ではインデックスのあるフィールドにできるだけ `==` の完全一致か `^` の前方一致を使い（[4.3](#43-search-の検索式) を参照）、広い範囲の `=` のあいまい検索で応答を遅くするのを避ける。プロジェクトの文脈がなければ、プロジェクトの絞り込みを無理に付けなくてよい。
 
-支持 `filter.project` 的类型见 [4.4](#44-filter-精确过滤) 表格。
+`filter.project` に対応する種類は [4.4](#44-filter-の厳密な絞り込み) の表を参照。
 
-### 4.1 资产类型 `asset_type`
+### 4.1 資産の種類 `asset_type`
 
 `asset`、`RootDomain`、`subdomain`、`app`、`mp`、`UrlScan`、`SensitiveResult`、`DirScanResult`、`crawler`、`vulnerability`、`PageMonitoring`、`IPAsset`、`SubdomainTakerResult`
 
-别名示例：`web`→asset、`vuln`→vulnerability、`ip`→IPAsset、`url`→UrlScan
+別名の例：`web`→asset、`vuln`→vulnerability、`ip`→IPAsset、`url`→UrlScan
 
-### 4.2 参数说明
+### 4.2 パラメータの説明
 
 
-| 参数                       | 说明                                      |
+| パラメータ                       | 説明                                      |
 | ------------------------ | --------------------------------------- |
-| `pageIndex` / `pageSize` | 分页，默认 1 / 20                            |
-| `search`                 | 搜索表达式（见下节）                              |
-| `filter`                 | 精确过滤 JSON（见下节）                          |
-| `sort`                   | 仅 UrlScan、DirScanResult 支持按 `length` 排序 |
-| `sid`                    | 仅 SensitiveResult：敏感规则名称                |
+| `pageIndex` / `pageSize` | ページ分け。既定は 1 / 20                            |
+| `search`                 | 検索式（次の節を参照）                              |
+| `filter`                 | 厳密な絞り込みの JSON（次の節を参照）                          |
+| `sort`                   | UrlScan、DirScanResult だけが `length` での並べ替えに対応 |
+| `sid`                    | SensitiveResult だけ：機微な情報の規則の名前                |
 
 
-`search` 与 `filter` **可同时使用**。
+`search` と `filter` は**同時に使える**。
 
-### 4.3 search 搜索表达式
+### 4.3 search の検索式
 
-自定义 DSL（**不是 SQL**）：
+独自の DSL（**SQL ではない**）：
 
 
-| 运算符  | 含义   | 索引 | 示例                          |
+| 演算子  | 意味   | インデックス | 例                          |
 | ---- | ---- | ---- | --------------------------- |
-| `=`  | 模糊匹配（regex） | 不走索引 | `domain=example`            |
-| `==` | 精确匹配（全等） | **走索引** | `port==443`                 |
-| `!=` | 排除   | — | `port!="80"`                |
-| `&&` | 与    | — | `domain==example.com && port==443` |
-| `||` | 或    | — | `title=admin || body=login` |
+| `=`  | あいまい一致（regex） | 使わない | `domain=example`            |
+| `==` | 厳密な一致（完全一致） | **使う** | `port==443`                 |
+| `!=` | 除外   | — | `port!="80"`                |
+| `&&` | かつ    | — | `domain==example.com && port==443` |
+| `||` | または    | — | `title=admin || body=login` |
 
 
-**索引与运算符：** `domain`、`ip`、`port`、`title` 等字段已建索引，但仅 **`==` 全等** 或 **值以 `^` 开头的前缀匹配**（如 `domain=^example.com`）能走索引；**`=` 会转为 regex 模糊匹配，无法使用索引**，数据量大时易变慢。
+**インデックスと演算子：** `domain`、`ip`、`port`、`title` などのフィールドにはインデックスがあるが、インデックスを使えるのは **`==` の完全一致**か**値が `^` で始まる前方一致**（例 `domain=^example.com`）だけ；**`=` は regex のあいまい一致に変わり、インデックスを使えない**ので、データが多いと遅くなりやすい。
 
-**所有类型通用 search 字段：** `tag`、`task`（任务名称）、`rootDomain`
+**どの種類でも使える search のフィールド：** `tag`、`task`（タスクの名前）、`rootDomain`
 
-**project 不能写在 search 里**（无效或与 `&&` 组合时报错）。筛项目请用 `filter.project`。
+**project は search に書けない**（効かないか、`&&` と組み合わせるとエラーになる）。プロジェクトで絞るには `filter.project` を使う。
 
-**各类型常用 search 字段：**
+**種類ごとによく使う search のフィールド：**
 
 
-| asset_type           | 字段                                                                                  |
+| asset_type           | フィールド                                                                                  |
 | -------------------- | ----------------------------------------------------------------------------------- |
 | asset                | domain, ip, port, service, app, title, statuscode, icon, banner, type, body, header |
 | RootDomain           | domain, icp, company                                                                |
@@ -253,42 +253,42 @@ flowchart LR
 | SubdomainTakerResult | domain, value, type, response                                                       |
 
 
-**search 示例：**
+**search の例：**
 
-- `domain==www.example.com && port==443`（全等，走索引）
-- `domain=^example.com`（前缀匹配，走索引）
+- `domain==www.example.com && port==443`（完全一致、インデックスを使う）
+- `domain=^example.com`（前方一致、インデックスを使う）
 - `ip==192.168.1.1`
-- `task=="某任务名"`
+- `task=="あるタスクの名前"`
 - `level==high`（vulnerability）
 - `statuscode==200`（DirScanResult）
 
-需模糊包含时再用 `=`，如 `title=admin`（不走索引，宜配合项目等条件缩小范围）。
+あいまいに含むものを探したいときだけ `=` を使う。例 `title=admin`（インデックスを使わないので、プロジェクトなどの条件と合わせて範囲を絞るのがよい）。
 
-### 4.4 filter 精确过滤
+### 4.4 filter の厳密な絞り込み
 
-JSON 对象：同 key 多个值为 **OR**，不同 key 为 **AND**。
+JSON のオブジェクト：同じ key の複数の値は **OR**、違う key どうしは **AND**。
 
-**有项目条件时优先用 `project`：** 若用户或上下文已明确项目，且 asset_type 支持 `project`，应带上以缩小范围；无项目信息时不强制。
+**プロジェクトの条件があるときは `project` を優先する：** ユーザーか文脈でプロジェクトがはっきりしていて、asset_type が `project` に対応するなら、付けて範囲を絞るべき；プロジェクトの情報がなければ無理に付けない。
 
 
-| filter key   | 含义       | 取值说明                                                     |
+| filter key   | 意味       | 値の説明                                                     |
 | ------------ | -------- | -------------------------------------------------------- |
-| `project`    | 所属项目     | **ObjectID**，用 `list_projects` / `list_projects_data` 获取 |
-| `task`       | 来源任务     | **任务名称**，用 `list_tasks` 的 `name`                         |
-| `port`       | 端口       | 如 `"443"`                                                |
-| `service`    | 服务/协议    | 如 `"https"`                                              |
-| `app`        | 应用指纹     | 如 `"Nginx"`                                              |
-| `icon`       | 图标 hash  |                                                          |
-| `statuscode` | HTTP 状态码 | 主要用于 asset                                               |
-| `status`     | 状态       | UrlScan/DirScan HTTP 码；漏洞/敏感信息处理状态                       |
-| `level`      | 漏洞等级     | critical / high / medium / low / info                    |
-| `type`       | 类型       | 如子域名记录类型 A、CNAME                                         |
-| `color`      | 敏感规则颜色   | SensitiveResult                                          |
-| `sname`      | 敏感规则名    | SensitiveResult                                          |
-| `tags`       | 标签       |                                                          |
+| `project`    | 属するプロジェクト     | **ObjectID**。`list_projects` / `list_projects_data` で取る |
+| `task`       | 元のタスク     | **タスクの名前**。`list_tasks` の `name`                         |
+| `port`       | ポート       | 例 `"443"`                                                |
+| `service`    | サービス/プロトコル    | 例 `"https"`                                              |
+| `app`        | アプリのフィンガープリント     | 例 `"Nginx"`                                              |
+| `icon`       | アイコンの hash  |                                                          |
+| `statuscode` | HTTP の状態コード | 主に asset に使う                                               |
+| `status`     | 状態       | UrlScan/DirScan の HTTP コード；脆弱性/機微な情報の対応の状態                       |
+| `level`      | 脆弱性の深刻度     | critical / high / medium / low / info                    |
+| `type`       | 種類       | 例 サブドメインのレコードの種類 A、CNAME                                         |
+| `color`      | 機微な情報の規則の色   | SensitiveResult                                          |
+| `sname`      | 機微な情報の規則の名前    | SensitiveResult                                          |
+| `tags`       | タグ       |                                                          |
 
 
-**各类型可用 filter key：**
+**種類ごとに使える filter key：**
 
 
 | asset_type                            | filter key                                                      |
@@ -306,19 +306,19 @@ JSON 对象：同 key 多个值为 **OR**，不同 key 为 **AND**。
 | IPAsset                               | project, port, service, app                                     |
 
 
-**filter 示例：**
+**filter の例：**
 
 ```json
-{"project": ["<项目ObjectID>"], "port": ["443"]}
+{"project": ["<プロジェクトのObjectID>"], "port": ["443"]}
 ```
 
-**组合查询示例：**
+**組み合わせた検索の例：**
 
 ```json
 {
   "asset_type": "asset",
   "search": "domain=^baidu && port==443",
-  "filter": {"project": ["<项目ObjectID>"]},
+  "filter": {"project": ["<プロジェクトのObjectID>"]},
   "pageIndex": 1,
   "pageSize": 10
 }
@@ -326,40 +326,40 @@ JSON 对象：同 key 多个值为 **OR**，不同 key 为 **AND**。
 
 **注意：**
 
-- 有项目条件时优先带 `filter.project`（支持时）；无项目上下文可不强制
-- `filter.project` 勿填项目显示名称
-- 已知值用 `==`，前缀用 `^`；避免对大表滥用 `=` 模糊匹配
-- UrlScan 的 HTTP 状态用 `filter.status`；DirScanResult 可在 search 中用 `statuscode==200`
-- SensitiveResult 按规则名：`search` 用 `sname=规则名`，或 `filter.sname`
+- プロジェクトの条件があるときは `filter.project` を優先して付ける（対応しているなら）；プロジェクトの文脈がなければ無理に付けなくてよい
+- `filter.project` にプロジェクトの表示名を入れない
+- わかっている値には `==`、前方一致には `^` を使う；大きなテーブルで `=` のあいまい一致を乱用しない
+- UrlScan の HTTP の状態は `filter.status` を使う；DirScanResult は search で `statuscode==200` を使える
+- SensitiveResult を規則の名前で：`search` で `sname=規則の名前`、または `filter.sname`
 
-### 4.5 排序 sort
+### 4.5 並べ替え sort
 
-仅 **UrlScan**、**DirScanResult** 支持：
+**UrlScan**、**DirScanResult** だけが対応：
 
 ```json
 {"length": "ascending"}
 ```
 
-其他类型忽略 `sort`，按时间默认排序。
+ほかの種類は `sort` を無視し、時刻の既定の順に並べる。
 
 ---
 
-## 5. 扫描模板模块名
+## 5. スキャンのテンプレートのモジュール名
 
 `TargetHandler`、`SubdomainScan`、`SubdomainSecurity`、`PortScanPreparation`、`PortScan`、`PortFingerprint`、`AssetMapping`、`AssetHandle`、`URLScan`、`WebCrawler`、`URLSecurity`、`DirScan`、`VulnerabilityScan`、`PassiveScan`
 
 ---
 
-## 6. 故障排查
+## 6. トラブルシューティング
 
 
-| 现象        | 处理                                                 |
+| 現象        | 対処                                                 |
 | --------- | -------------------------------------------------- |
-| MCP 无工具   | 检查 URL、API Key、ScopeSentry 是否运行                    |
-| 401 / 403 | 重新创建或更换 API Key                                    |
-| 资产查不到     | 确认 `filter.project` 为 ObjectID；勿在 search 写 project |
-| 模板/任务创建失败 | `template` 必须是模板 ObjectID；`node` 填在线节点名            |
-| 查询很慢/卡住   | 有项目时加 `filter.project`；search 对已索引字段改用 `==` 或 `^` 前缀，少用 `=`；缩小 `pageSize` |
+| MCP にツールがない   | URL、API Key、ScopeSentry が動いているかを調べる                    |
+| 401 / 403 | API Key を作り直すか換える                                    |
+| 資産が見つからない     | `filter.project` が ObjectID かを確かめる；search に project を書かない |
+| テンプレート/タスクの作成に失敗 | `template` はテンプレートの ObjectID でなければならない；`node` にはオンラインのノードの名前を入れる            |
+| 検索がとても遅い/止まる   | プロジェクトがあれば `filter.project` を付ける；search ではインデックスのあるフィールドに `==` か `^` の前方一致を使い、`=` を減らす；`pageSize` を小さくする |
 
 
 ---

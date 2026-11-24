@@ -104,7 +104,7 @@ func TestTaskAssetAttachDetachPreservesGlobalAssetAndAnchors(t *testing.T) {
 	}
 	t.Cleanup(func() { _, _ = d.Assets().DeleteByIDs([]int64{assetID}) })
 
-	mutation, err := d.Assets().AttachAssetsToTask(task.ID, []int64{assetID, assetID}, "授权资产清单第 3 项")
+	mutation, err := d.Assets().AttachAssetsToTask(task.ID, []int64{assetID, assetID}, "認可された資産の一覧の第 3 項")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestTaskAssetAttachDetachPreservesGlobalAssetAndAnchors(t *testing.T) {
 	if err != nil || len(assets) != 1 {
 		t.Fatalf("task assets=%+v err=%v", assets, err)
 	}
-	if assets[0].TaskSource != "manual" || assets[0].TaskSourceSummary != "授权资产清单第 3 项" {
+	if assets[0].TaskSource != "manual" || assets[0].TaskSourceSummary != "認可された資産の一覧の第 3 項" {
 		t.Fatalf("unexpected provenance: %+v", assets[0])
 	}
 
@@ -171,7 +171,7 @@ func TestIntentAssetsIncludesDirectSourceProvenance(t *testing.T) {
 		t.Fatal(err)
 	}
 	nodeID := intentID
-	if err := d.Assets().SetTaskAssetSource(source.ID, assetID, "agent", "Worker 通过 insert_assets 登记", &nodeID); err != nil {
+	if err := d.Assets().SetTaskAssetSource(source.ID, assetID, "agent", "Worker が insert_assets で登録", &nodeID); err != nil {
 		t.Fatal(err)
 	}
 

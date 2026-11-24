@@ -94,7 +94,7 @@ const GROUP_MESSAGE_KEY: Record<number, string> = { 1: "function", 2: "system" }
 export function NavMain({ items }: NavMainProps) {
   const t = useTranslations("nav");
   const rawPath = usePathname();
-  // 路由段含中文，pathname 可能是百分号编码，解码后再与导航 url 比较，保证高亮命中。
+  // ルートの区切りに非 ASCII の文字が入ると pathname がパーセントエンコードされることがあるので、デコードしてから移動の url と比べ、強調が当たるようにする。
   const path = (() => {
     try {
       return decodeURIComponent(rawPath);

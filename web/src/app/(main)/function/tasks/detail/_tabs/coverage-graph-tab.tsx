@@ -15,7 +15,7 @@ import { api } from "@/lib/api";
 import type { CoverageAssetRef, CoverageAssetRefs, CoverageGraphEdge, CoverageGraphNode } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-// 每个父节点下、同一类型的子节点默认展示的数量；超出折叠，"展示更多"每次再拉这么多。
+// 親のノードごと、同じ種類の子のノードを既定で表示する数；超えたら折りたたみ、"もっと見る"のたびにこの数だけ足す。
 const FOLD_LIMIT = 20;
 const FOLD_STEP = 20;
 
@@ -35,9 +35,9 @@ const kindMeta: Record<Kind, KindMeta> = {
   endpoint: { icon: Link2, iconBg: "bg-rose-500", hex: "#f43f5e", size: 20 },
 };
 
-// G6 节点图标用平台一致的 lucide 图标：把 lucide 的 SVG 路径（v1.22）渲染成白色描边的
-// data URI，作为节点 iconSrc（白色在实色/灰色底上都清晰）。手写内嵌，避免 react-dom/server
-// 在 React19/Next 客户端打包的问题。
+// G6 のノードのアイコンはプラットフォームでそろえた lucide のアイコンを使う：lucide の SVG のパス（v1.22）を白い輪郭の
+// data URI にし、ノードの iconSrc にする（白は塗りの色/灰色の地のどちらでもくっきり見える）。手で埋め込み、react-dom/server が
+// React19/Next のクライアントのバンドルで起こす問題を避ける。
 function svgUri(inner: string, filled = false): string {
   const attrs = filled
     ? 'fill="#fff" stroke="none"'
@@ -76,7 +76,7 @@ const FOLD_ICON = svgUri(
 );
 
 // ---------------------------------------------------------------------------
-// Folding: full graph → currently-visible node/edge set (自顶向下级联折叠)。
+// Folding: full graph → currently-visible node/edge set (上から下へ連鎖して折りたたむ)。
 // ---------------------------------------------------------------------------
 type FoldNode = {
   fold: true;
@@ -164,7 +164,7 @@ function computeVisible(
 }
 
 // ---------------------------------------------------------------------------
-// G6 数据映射。自定义字段放节点顶层（G6 v5 官方 force 示例约定：style/layout 回调直接读 d.<field>）。
+// G6 のデータの対応づけ。カスタムのフィールドはノードの最上位に置く（G6 v5 の公式の force の見本の約束：style/layout のコールバックが d.<field> を直接読む）。
 // ---------------------------------------------------------------------------
 type G6NodeDatum = {
   id: string;
@@ -180,8 +180,8 @@ function trunc(s: string, n = 26): string {
   return s.length > n ? `${s.slice(0, n - 1)}…` : s;
 }
 
-// 图里的节点文案：服务不显示完整 URL，只显示 端口·标题·状态码；端点只显示 path。
-// 其余类型沿用后端给的 label。
+// 図のノードの文面：サービスは完全な URL を出さず、ポート·タイトル·状態コードだけを出す；エンドポイントは path だけを出す。
+// ほかの種類はバックエンドが与えた label をそのまま使う。
 function graphLabel(n: CoverageGraphNode): string {
   if (n.kind === "service") {
     const parts: string[] = [];
@@ -195,7 +195,7 @@ function graphLabel(n: CoverageGraphNode): string {
     try {
       return new URL(n.url).pathname || "/";
     } catch {
-      /* 非法 URL：回退到完整 label */
+      /* 不正な URL：完全な label に戻る */
     }
   }
   return n.label;
@@ -230,11 +230,11 @@ function toG6Nodes(
   });
 }
 
-// G6 的类型把自定义字段归在 data 下，但官方 force 示例（及运行时）按顶层读 d.<field>。
-// 回调形参用 unknown 满足 G6 签名，内部用 nd() 强转回我们的顶层结构。
+// G6 の型はカスタムのフィールドを data の下に置くが、公式の force の見本（と実行時）は最上位の d.<field> を読む。
+// コールバックの引数は unknown にして G6 のシグネチャを満たし、中で nd() を使って最上位の構造に戻す。
 const nd = (d: unknown) => d as G6NodeDatum;
 
-// 已测=实色高亮；范围内未测=灰；范围外/折叠=更淡的灰 + 虚线描边。
+// テスト済み=塗りの色で強調；範囲の中でテストしていない=灰色；範囲の外/折りたたみ=もっと薄い灰色 + 破線の輪郭。
 function nodeFill(d: G6NodeDatum): string {
   if (d.fold) return "#f1f5f9";
   if (!d.inScope) return "#e2e8f0";
@@ -248,7 +248,7 @@ function nodeStroke(d: G6NodeDatum): string {
 }
 
 // ---------------------------------------------------------------------------
-// 抽屉：资产节点看详情；折叠节点看隐藏列表 + "展示更多"。
+// 引き出し：資産のノードは詳細を見る；折りたたみのノードは隠れた一覧 + "もっと見る"。
 // ---------------------------------------------------------------------------
 function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
   if (children === undefined || children === null || children === "") return null;
@@ -315,7 +315,7 @@ function AssetSheet({
         if (!cancelled) setRefs(r);
       })
       .catch(() => {
-        /* 无关联或出错：不展示该区块 */
+        /* 関連がないかエラー：この区画を表示しない */
       });
     return () => {
       cancelled = true;
@@ -478,7 +478,7 @@ function GraphInner({ taskId, coverageEnabled = true }: { taskId: string; covera
 
   const containerRef = React.useRef<HTMLDivElement>(null);
   const graphRef = React.useRef<G6Graph | null>(null);
-  // click 处理需要最新的 key→RenderNode 映射（G6 事件回调闭包外读 ref）。
+  // click の処理には最新の key→RenderNode の対応が要る（G6 のイベントのコールバックはクロージャの外の ref を読む）。
   const renderMapRef = React.useRef<Map<string, RenderNode>>(new Map());
   const gDataRef = React.useRef<{ nodes: G6NodeDatum[]; edges: { source: string; target: string }[] }>({
     nodes: [],
@@ -490,13 +490,13 @@ function GraphInner({ taskId, coverageEnabled = true }: { taskId: string; covera
     api
       .taskCoverageGraph(taskId)
       .then((g) => {
-        // 资产覆盖度功能关闭(B1)：仍出图(范围内资产/company 关联依旧可见)，但抹平
-        // tested 状态——不显示测试进度、不做已测高亮。
+        // 資産のカバー率の機能がオフ(B1)：図は出す(範囲の中の資産/company の関連はやはり見える)が、
+        // tested の状態をならす——テストの進み具合を出さず、テスト済みの強調もしない。
         const nodes = coverageEnabled ? (g.nodes ?? []) : (g.nodes ?? []).map((n) => ({ ...n, tested: false }));
         setData({ nodes, edges: g.edges ?? [] });
       })
       .catch(() => {
-        /* 保留上一次数据 */
+        /* 前回のデータを残す */
       })
       .finally(() => setLoading(false));
   }, [taskId, coverageEnabled]);
@@ -513,7 +513,7 @@ function GraphInner({ taskId, coverageEnabled = true }: { taskId: string; covera
     [data, expanded],
   );
 
-  // 结构签名：只在可见节点/边集合变化时重建图 + 重跑布局，避免无谓抖动。
+  // 構造の署名：見えるノード/辺の集合が変わったときだけ図を作り直し + レイアウトをやり直し、要らない揺れを避ける。
   const sig = React.useMemo(
     () =>
       `${renderNodes
@@ -523,7 +523,7 @@ function GraphInner({ taskId, coverageEnabled = true }: { taskId: string; covera
     [renderNodes, renderEdges],
   );
 
-  // 维护 gDataRef + renderMapRef（供事件与图数据应用读取）。
+  // gDataRef + renderMapRef を保つ（イベントと図のデータの適用が読む）。
   gDataRef.current = {
     nodes: toG6Nodes(renderNodes, kindLabel, moreLabel),
     edges: renderEdges.map((e) => ({ source: e.src, target: e.dst })),
@@ -536,15 +536,15 @@ function GraphInner({ taskId, coverageEnabled = true }: { taskId: string; covera
     const graph = graphRef.current;
     if (!graph || graph.destroyed) return;
     graph.setData(gDataRef.current);
-    // render() 异步跑 d3-force 布局;若组件在布局落地前被卸载/销毁,g6 会在已清空的
-    // context 上访问 transform 抛错(见 runtime/layout transformDataAfterLayout)。这是纯
-    // teardown 竞态,吞掉它,不影响功能;真正的渲染错误(图未销毁)仍打日志。
+    // render() は非同期で d3-force のレイアウトを走らせる;レイアウトが決まる前に部品が外される/壊されると、g6 は空にした
+    // context で transform に触れて例外を投げる(runtime/layout transformDataAfterLayout を参照)。これは純粋な
+    // teardown の競合なので、飲み込んでも機能に影響しない;本当の描画のエラー(図が壊されていない)はやはりログに出す。
     void graph.render().catch((err) => {
       if (!graph.destroyed) console.error("[coverage-graph] render:", err);
     });
   }, []);
 
-  // 建图（一次）。动态 import 避开 SSR/静态导出期的 window 依赖。
+  // 図を作る（1回）。動的 import で SSR/静的なエクスポートのときの window への依存を避ける。
   React.useEffect(() => {
     let destroyed = false;
     let graph: G6Graph | null = null;
@@ -584,7 +584,7 @@ function GraphInner({ taskId, coverageEnabled = true }: { taskId: string; covera
           collide: { radius: (d: unknown) => (nd(d).size ? nd(d).size : 20) + 8 },
           link: {
             distance: (edge: unknown) => {
-              // 顶层（公司/根域名）离子节点远一点，叶子近一点。edge.source 可能是 id 或已解析节点。
+              // 最上位（企業/ルートドメイン）は子のノードから少し遠く、葉は近く。edge.source は id か解決済みのノードのことがある。
               const s = (edge as { source: string | { id?: string } }).source;
               const srcId = typeof s === "string" ? s : (s?.id ?? "");
               const src = renderMapRef.current.get(srcId);
@@ -611,19 +611,19 @@ function GraphInner({ taskId, coverageEnabled = true }: { taskId: string; covera
     })();
     return () => {
       destroyed = true;
-      // 先停布局再销毁:尽量缩短"布局在飞、context 被清空"的竞态窗口。
+      // 先にレイアウトを止めてから壊す:「レイアウトが動いているのに context が空になる」競合の窓をできるだけ短くする。
       try {
         graph?.stopLayout();
       } catch {
-        /* 图可能尚未建成或已无布局上下文 */
+        /* 図がまだできていないか、もうレイアウトの文脈がない */
       }
       graph?.destroy();
       graphRef.current = null;
     };
   }, [applyData]);
 
-  // 可见集合变化 → 重新灌数据 + 布局。sig 只作为重排触发器（applyData 读 gDataRef）。
-  // biome-ignore lint/correctness/useExhaustiveDependencies: sig 是刻意的重排触发依赖
+  // 見える集合が変わった → データを流し込み直し + レイアウト。sig は並べ直しのきっかけとしてだけ使う（applyData は gDataRef を読む）。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sig はわざと置いた並べ直しのきっかけの依存
   React.useEffect(() => {
     applyData();
   }, [sig, applyData]);
@@ -652,7 +652,7 @@ function GraphInner({ taskId, coverageEnabled = true }: { taskId: string; covera
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
 
-      {/* 图例 + 统计 + 刷新（叠加层） */}
+      {/* 凡例 + 統計 + 更新（重ねた層） */}
       <div className="bg-card/95 pointer-events-auto absolute top-3 left-3 flex max-w-[340px] flex-col gap-2.5 rounded-lg border p-3 text-xs shadow-sm backdrop-blur">
         <div className="flex items-center justify-between gap-3">
           {total > 0 ? (

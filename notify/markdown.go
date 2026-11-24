@@ -5,37 +5,37 @@ import (
 	"strings"
 )
 
-// 本文件是「Markdown 系」渠道（钉钉、企业微信）共用的消息渲染。
-// 飞书用卡片 JSON、Telegram 用 HTML、邮件用 HTML，各自在适配器里渲染。
+// このファイルは「Markdown 系」のチャネル（DingTalk、WeCom）が共有するメッセージの描画。
+// Feishu はカードの JSON、Telegram は HTML、メールは HTML を使い、それぞれアダプタの中で描画する。
 
-// maxAssetsShown 是消息里最多列出几个资产。一个漏洞可能锚定几十个资产，
-// 全列会挤爆消息且没有信息价值——第 4 个之后的域名没人会在 IM 里看。
+// maxAssetsShown はメッセージに最大で何件の資産を挙げるか。1件の脆弱性が数十の資産に結びつくことがあり、
+// 全部挙げるとメッセージがあふれるうえ情報としての価値もない——4件目以降のドメインを IM で見る人はいない。
 const maxAssetsShown = 3
 
-// maxSummaryRunes 是摘要被压缩到多少字符。IM 消息是「提示去看详情」，
-// 不是报告本体，完整内容在平台里。
+// maxSummaryRunes は要約を何文字に縮めるか。IM のメッセージは「詳細を見るよう促す」もので、
+// レポートそのものではなく、完全な内容はプラットフォームにある。
 const maxSummaryRunes = 120
 
-// markdownReservedBytes 预留给消息头部（汇总行 + 级别分布 + 可能的截断提示）
-// 与尾部（平台链接）。按整条打包时把这部分从预算里扣掉，保证头尾不会被截掉——
-// 头尾一旦被截，读者连「这是哪一批、还有多少条没显示」都看不出来。
+// markdownReservedBytes はメッセージの見出し（まとめの行 + 深刻度の分布 + 切り詰めの注記があればそれ）
+// と末尾（プラットフォームへのリンク）のために取っておく。項目単位で詰めるときにこの分を予算から差し引き、見出しと末尾が切り詰められないようにする——
+// 見出しや末尾が切られると、読む人は「これはどの一括分で、表示されていないのがあと何件あるか」すらわからなくなる。
 const markdownReservedBytes = 320
 
-// markdownEscape 转义 markdown 元字符。
+// markdownEscape は markdown のメタ文字をエスケープする。
 //
-// 为什么必须做：漏洞标题、摘要、类型、资产展示名全都来自**不可信来源**——
-// 标题与摘要出自模型输出（模型读的是被测目标的响应），资产的 url 则是扫描
-// 得到的完整 URL（含目标可控的查询串）。不转义的话，一条标题为
+// 必ず行う理由：脆弱性のタイトル、要約、種類、資産の表示名はすべて**信頼できない出所**から来る——
+// タイトルと要約はモデルの出力（モデルが読むのは検査対象のレスポンス）に由来し、資産の url はスキャンで
+// 得た完全な URL（対象が制御できるクエリ文字列を含む）だ。エスケープしないと、タイトルが
 //
-//	登录口 SQL 注入\n[紧急：点此验证账号](http://attacker.tld)
+//	ログイン画面の SQL インジェクション\n[緊急：ここをクリックしてアカウントを確認](http://attacker.tld)
 //
-// 的漏洞会在安全工程师的钉钉/飞书里渲染成**可点击的外链**；而
-// `![](http://attacker.tld/beacon)` 会在渲染时被客户端拉取，等于通报了
-// 「这条漏洞已经被看过」并泄露阅读者 IP。就算是无恶意的内容，注入的粗体或
-// 引用块也能把下面的严重漏洞挤出折叠线。
+// である脆弱性は、セキュリティエンジニアの DingTalk/Feishu で**クリックできる外部リンク**として描画される。また
+// `![](http://attacker.tld/beacon)` は描画時にクライアントが取得するので、「この脆弱性はもう見られた」と
+// 知らせ、読んだ人の IP を漏らすことになる。悪意のない内容でも、注入された太字や
+// 引用ブロックが下にある深刻な脆弱性を折りたたみの線の外へ押し出しうる。
 //
-// 转义集合覆盖标题/链接/强调/列表/引用/删除线这几类会改变结构或产生可点击
-// 元素的字符。`\` 必须最先处理，否则会把后面补上的反斜杠再次转义。
+// エスケープの対象は、見出し/リンク/強調/リスト/引用/取り消し線といった、構造を変えたりクリックできる
+// 要素を生んだりする文字を網羅する。`\` は必ず最初に処理する。さもないとあとで足したバックスラッシュをもう一度エスケープしてしまう。
 func markdownEscape(s string) string {
 	replacer := strings.NewReplacer(
 		`\`, `\\`,
@@ -55,21 +55,21 @@ func markdownEscape(s string) string {
 	return replacer.Replace(s)
 }
 
-// markdownText 把不可信文本压成单行并转义，供 markdown 正文使用。
-// 单行化是转义之外的另一半：换行本身就能伪造出新的列表项或引用块，
-// 而转义字符挡不住它。
+// markdownText は信頼できない文を1行にまとめてエスケープし、markdown の本文に使う。
+// 1行化はエスケープと対をなすもう半分：改行それ自体で新しいリスト項目や引用ブロックを偽造でき、
+// エスケープ文字ではそれを止められない。
 func markdownText(s string, maxRunes int) string {
 	return markdownEscape(OneLine(s, maxRunes))
 }
 
-// markdownTitle 返回消息标题（IM 平台的标题栏/卡片标题），内容是**未转义的原文**。
+// markdownTitle はメッセージのタイトル（IM プラットフォームのタイトルバー/カードのタイトル）を返し、内容は**エスケープしていない原文**。
 //
-// 这里刻意不做转义：这个标题被四种语境的渲染器共用——markdown 正文、Telegram 的
-// HTML、飞书卡片的 plain_text、以及通用 Webhook 的 JSON 与邮件主题。每个语境的
-// 转义规则都不同（markdown 转义塞进 HTML 会留下可见的反斜杠，塞进 JSON 会污染
-// 数据），所以转义必须由各自的输出端负责，见 writeItem / feishuItemLines /
-// telegramEscape。曾经在共享函数里加过 markdown 转义，结果 Telegram 消息里
-// 出现了 `\(1\)` 这种可见的反斜杠。
+// ここではわざとエスケープしない：このタイトルは4種類の文脈の描画で共有される——markdown の本文、Telegram の
+// HTML、Feishu のカードの plain_text、そして汎用 Webhook の JSON とメールの件名。文脈ごとに
+// エスケープのルールが違う（markdown のエスケープを HTML に入れると見えるバックスラッシュが残り、JSON に入れると
+// データを汚す）ので、エスケープはそれぞれの出力側が受け持つ。writeItem / feishuItemLines /
+// telegramEscape を参照。以前に共有の関数で markdown のエスケープを足したところ、Telegram のメッセージに
+// `\(1\)` のような見えるバックスラッシュが出た。
 func markdownTitle(m Message) string {
 	if m.Batch {
 		return fmt.Sprintf("취약점 요약 · 총 %d건", len(m.Items))
@@ -81,14 +81,14 @@ func markdownTitle(m Message) string {
 	return fmt.Sprintf("[%s] %s", SeverityLabel(it.Severity), OneLine(it.Title(), 0))
 }
 
-// markdownBody 渲染消息正文，返回正文与**实际写入的条目数**。
+// markdownBody はメッセージの本文を描画し、本文と**実際に書き込んだ項目の数**を返す。
 //
-// 返回值 kept 是这次投递真正送达的条目数，调用方据此只把前 kept 条标记为
-// 已送达——被渠道长度上限挡在外面的条目必须留待下一批，而不是跟着一起被
-// 标记成功。这正是「静默丢失」的来源：消息被截断了，但投递记录显示全部送达，
-// 没有任何地方能看出后半截从未发出。
+// 戻り値の kept は今回の配信で本当に届いた項目の数で、呼び出し側はこれをもとに先頭の kept 件だけを
+// 配信済みにする——チャネルの長さの上限で外された項目は次の一括分に回すべきで、一緒に
+// 成功扱いにしてはならない。これこそ「黙った取りこぼし」の原因だ：メッセージは切り詰められたのに、配信記録ではすべて届いたことになり、
+// 後半が一度も送られていないことがどこからもわからない。
 //
-// maxBytes<=0 表示不限制。
+// maxBytes<=0 なら制限しない。
 func markdownBody(m Message, maxBytes int) (string, int) {
 	if !m.Batch {
 		if len(m.Items) == 0 {
@@ -96,8 +96,8 @@ func markdownBody(m Message, maxBytes int) (string, int) {
 		}
 		var b strings.Builder
 		writeItem(&b, m.Items[0], "", true)
-		// 单条消息即使超长也照发（由最终截断兜底）：一条漏洞的部分信息
-		// 也好过一条都不发。
+		// 単発のメッセージは長すぎても送る（最後の切り詰めが受け皿になる）：脆弱性の一部の情報でも、
+		// 1件も送らないよりはよい。
 		return TruncateBytes(b.String(), maxBytes), 1
 	}
 
@@ -121,12 +121,12 @@ func markdownBody(m Message, maxBytes int) (string, int) {
 	return TruncateBytes(b.String(), maxBytes), kept
 }
 
-// markdownBatchIntro 渲染汇总消息的开头：时间窗、条数与级别分布。
-// 有了这些，收到汇总的人不用点进平台就能判断这批需不需要立刻处理。
+// markdownBatchIntro はまとめのメッセージの冒頭を描画する：時間枠、件数、深刻度の分布。
+// これがあれば、まとめを受け取った人はプラットフォームを開かなくても、この一括分をすぐ処理すべきかを判断できる。
 //
-// items 是**实际装下**的条目，total 是本批应有的总数。两者不同时必须明说
-// 「还有多少条在下一条消息里」——否则读者会以为消息头写的那个数字就是全部，
-// 而后面那些从未发出的条目在界面上完全不存在。
+// items は**実際に収まった**項目で、total はこの一括分の本来の総数。両者が違うときは
+// 「あと何件が次のメッセージにあるか」を必ずはっきり書く——さもないと読む人は見出しに書かれた数がすべてだと思い、
+// 送られなかった残りの項目は画面上にまったく存在しないことになる。
 func markdownBatchIntro(m Message, items []Item, total int) string {
 	var b strings.Builder
 	if m.WindowMinutes > 0 {
@@ -137,8 +137,8 @@ func markdownBatchIntro(m Message, items []Item, total int) string {
 	if extra := total - len(items); extra > 0 {
 		fmt.Fprintf(&b, "(이 메시지에는 앞 %d건만 표시하며, 나머지 %d건은 다음 메시지에서 이어서 보냅니다)", len(items), extra)
 	}
-	// 按级别给出分布，让读者一眼看到有没有严重项。只统计**本条实际包含**的
-	// 条目，保证「严重 3」和下面能数出来的条目一致。
+	// 深刻度ごとの分布を示し、深刻な項目があるかをひと目でわかるようにする。数えるのは**このメッセージに実際に含まれる**
+	// 項目だけで、「緊急 3」と下で数えられる項目が一致するようにする。
 	counts := map[string]int{}
 	for _, it := range items {
 		counts[it.Severity]++
@@ -156,18 +156,18 @@ func markdownBatchIntro(m Message, items []Item, total int) string {
 	return b.String()
 }
 
-// writeItem 渲染单个漏洞条目。
+// writeItem は1件の脆弱性の項目を描画する。
 //
-// prefix 用于汇总列表的序号；single=true 时渲染完整版（含摘要与回链），
-// 汇总列表里只渲染一行摘要——否则 50 条汇总会变成一篇长文档。
+// prefix はまとめの一覧の通し番号に使う。single=true なら完全版（要約と戻りリンクを含む）を描画し、
+// まとめの一覧では1行の要約だけを描画する——さもないと 50 件のまとめが長い文書になってしまう。
 //
-// 所有来自外部的内容（标题/类型/资产/摘要）都过 markdownText：
-// 单行化 + 转义。回链是管理员配置的 public_base_url 拼出来的，不是不可信内容，
-// 且必须是可点的链接，所以原样输出。
+// 外部から来る内容（タイトル/種類/資産/要約）はすべて markdownText を通す：
+// 1行化 + エスケープ。戻りリンクは管理者が設定した public_base_url から組み立てたもので、信頼できない内容ではなく、
+// しかもクリックできるリンクでなければならないので、そのまま出力する。
 func writeItem(b *strings.Builder, it Item, prefix string, single bool) {
 	line := fmt.Sprintf("%s**%s · %s**", prefix, SeverityLabel(it.Severity), markdownText(it.Title(), 0))
 	if !single {
-		// 汇总模式：单行呈现，资产与摘要压缩后跟在后面。
+		// まとめのモード：1行で示し、資産と要約は縮めて後ろに続ける。
 		var extras []string
 		if a := assetLine(it.Assets, maxAssetsShown); a != "" {
 			extras = append(extras, markdownText(a, 0))

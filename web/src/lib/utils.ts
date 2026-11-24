@@ -5,16 +5,16 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-// 抽屉/对话框(Sheet/Dialog)的 onInteractOutside 关闭判定辅助。
+// 引き出し/ダイアログ(Sheet/Dialog)の onInteractOutside で閉じるかを判定する補助。
 //
-// 背景:抽屉内的 Radix 弹层(Select 下拉、DropdownMenu、Popover 等)会 portal 到抽屉
-// 之外。开着弹层时点遮罩/抽屉外想收起它,这一次 pointerdown 会被 Select 和 Sheet 两个
-// DismissableLayer 同时处理;Select 先关闭且是 discrete 事件、React 会同步 flush,于是
-// 轮到 Sheet 的处理器时弹层的 data-state 早已翻成 closed —— 在"当下"检测弹层是否打开
-// 天然不可靠(实测已验证)。
+// 背景:引き出しの中の Radix の重なった層(Select のプルダウン、DropdownMenu、Popover など)は引き出しの
+// 外に portal される。重なった層が開いているときにオーバーレイ/引き出しの外を押してそれを閉じたいと、その pointerdown は Select と Sheet の2つの
+// DismissableLayer が同時に扱う;Select が先に閉じ、それは discrete のイベントなので React が同期で flush し、そのため
+// Sheet の処理の番が来たときには重なった層の data-state はもう closed に変わっている —— 「その場で」重なった層が開いているかを調べるのは
+// もともと当てにならない(実際に確かめた)。
 //
-// 正确做法:Radix 的 pointerdown 监听在冒泡阶段;我们在 capture 阶段(早于它)先把
-// "此刻有没有弹层开着"记录下来,onInteractOutside 再读这个记录值来决定是否放行关闭。
+// 正しいやり方:Radix の pointerdown の受け手はバブリングの段階にある;我々は capture の段階(それより早い)で先に
+// 「いま重なった層が開いているか」を記録し、onInteractOutside がその記録した値を読んで閉じてよいかを決める。
 function isRadixOverlayOpenNow(): boolean {
   if (typeof document === "undefined") return false;
   return !!document.querySelector(
@@ -35,26 +35,26 @@ if (typeof document !== "undefined") {
     () => {
       overlayOpenAtLastPointerDown = isRadixOverlayOpenNow();
     },
-    true, // capture:抢在 Radix 冒泡阶段的 pointerdown 处理器之前记录
+    true, // capture:Radix のバブリングの段階の pointerdown の処理より先に記録する
   );
 }
 
-// radixOverlayWasOpenAtPointerDown 返回"最近一次 pointerdown 发生时是否有 Radix 弹层
-// 开着"。抽屉/对话框据此:开着弹层时点遮罩 → 只收弹层、不关自身。
+// radixOverlayWasOpenAtPointerDown は「最後の pointerdown が起きたときに Radix の重なった層が
+// 開いていたか」を返す。引き出し/ダイアログはそれに従う:重なった層が開いているときにオーバーレイを押す → 重なった層だけを閉じ、自分は閉じない。
 export function radixOverlayWasOpenAtPointerDown(): boolean {
   return overlayOpenAtLastPointerDown;
 }
 
-// copyText 把文本写入剪贴板,返回是否成功。
-// 背景:navigator.clipboard 仅在安全上下文(HTTPS / localhost)可用;通过 IP + HTTP
-// 访问时它为 undefined,此时降级到 execCommand("copy")。
+// copyText は文字をクリップボードに書き込み、成功したかを返す。
+// 背景:navigator.clipboard は安全な文脈(HTTPS / localhost)でしか使えない;IP + HTTP で
+// 開いたときは undefined なので、そのときは execCommand("copy") に落とす。
 export async function copyText(text: string): Promise<boolean> {
   if (navigator.clipboard && window.isSecureContext) {
     try {
       await navigator.clipboard.writeText(text);
       return true;
     } catch {
-      // 继续走降级方案
+      // 代わりの方法に進む
     }
   }
   try {

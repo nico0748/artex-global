@@ -26,7 +26,7 @@ func TestChatMentionErrorsLocalized(t *testing.T) {
 	}
 
 	// parseChatMentions — a non-positive id inside a valid wire token.
-	if _, err := parseChatMentions("@[漏洞#0]"); err == nil {
+	if _, err := parseChatMentions("@[脆弱性#0]"); err == nil {
 		t.Fatal("잘못된 인용 ID 가 통과해서는 안 됩니다")
 	} else {
 		assertKoreanError(t, "parse.badID", err.Error())
@@ -35,7 +35,7 @@ func TestChatMentionErrorsLocalized(t *testing.T) {
 	// parseChatMentions — exceeding the per-message mention cap (11 distinct ids).
 	var b strings.Builder
 	for i := 1; i <= 11; i++ {
-		fmt.Fprintf(&b, "@[漏洞#%d] ", i)
+		fmt.Fprintf(&b, "@[脆弱性#%d] ", i)
 	}
 	if _, err := parseChatMentions(b.String()); err == nil {
 		t.Fatal("인용 상한 초과가 통과해서는 안 됩니다")
@@ -44,7 +44,7 @@ func TestChatMentionErrorsLocalized(t *testing.T) {
 	}
 
 	// composeChatMentionMessage — a mention is present but the database is nil.
-	if _, err := composeChatMentionMessage(nil, "@[漏洞#1]"); err == nil {
+	if _, err := composeChatMentionMessage(nil, "@[脆弱性#1]"); err == nil {
 		t.Fatal("DB 없이 인용 해석이 통과해서는 안 됩니다")
 	} else {
 		assertKoreanError(t, "compose.dataUnavail", err.Error())

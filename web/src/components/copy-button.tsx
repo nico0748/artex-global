@@ -10,9 +10,9 @@ import { Button } from "@/components/ui/button";
 import { cn, copyText } from "@/lib/utils";
 
 type CopyButtonProps = {
-  // 要复制的文本;为空则按钮禁用。
+  // コピーする文字;空ならボタンを無効にする。
   text: string | null | undefined;
-  // 复制成功后的 toast 文案,默认「已复制」。
+  // コピーに成功した後の toast の文面。既定は「コピーした」。
   successMessage?: string;
   label?: React.ReactNode;
   size?: React.ComponentProps<typeof Button>["size"];
@@ -20,8 +20,8 @@ type CopyButtonProps = {
   className?: string;
 };
 
-// CopyButton 统一的「复制到剪贴板」按钮:内置成功/失败反馈,并在 HTTP 非安全上下文
-// 下自动降级(见 copyText)。
+// CopyButton はそろえた「クリップボードにコピー」のボタン:成功/失敗の知らせを組み込み、HTTP の安全でない文脈では
+// 自動で代わりの方法に落とす(copyText を参照)。
 export function CopyButton({
   text,
   successMessage,

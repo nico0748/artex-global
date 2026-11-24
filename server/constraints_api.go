@@ -9,19 +9,19 @@ import (
 	"github.com/Autumn-27/artex/db"
 )
 
-// 总览「约束管理」的人工 CRUD 接口 + 注入范围开关的解析。操作约束(allow/deny)与 agent 侧的
-// set_constraints 工具写同一张 task_constraints 表;这里是人类在 UI 上直接增删改。约束仅是
-// 提示上下文——增删改后【不】通知 planner,下一轮规划自然读库生效(按产品决策)。每个变更 handler
-// 都走 beginTaskOperation/decInflight,避免与任务删除竞态(与目标/意图 CRUD 一致)。
+// 概要の「制約の管理」の人による CRUD のインターフェース + 注入の範囲の切り替えの解決。操作の制約(allow/deny)は agent 側の
+// set_constraints ツールと同じ task_constraints 表に書く;ここは人間が UI で直接追加・削除・変更する。制約は
+// プロンプトのコンテキストにすぎない——追加・削除・変更の後に planner には【知らせず】、次のラウンドの計画で自然に DB を読んで効く(製品の決定による)。変更の handler は
+// どれも beginTaskOperation/decInflight を通り、タスクの削除との競合を避ける(目標/意図の CRUD と同じ)。
 
-// 注入范围开关的 settings key,默认都开(GetBool 第二参数 = true)。
+// 注入の範囲の切り替えの settings の key。既定はどれもオン(GetBool の第2引数 = true)。
 const (
 	settingConstraintsInjectPlanner = "constraints_inject_planner"
 	settingConstraintsInjectWorker  = "constraints_inject_worker"
 )
 
-// 约束 CRUD 핸들러의 사용자 노출 에러 응답(한국어). writeErr 로 그대로 UI 토스트에 노출된다.
-// 用語: 约束→제약(ko.json 의 약속/제약 표기와 정합), 任务→작업. 추가/수정/삭제 문구는
+// 制約 CRUD 핸들러의 사용자 노출 에러 응답(한국어). writeErr 로 그대로 UI 토스트에 노출된다.
+// 用語: 制約→제약(ko.json 의 약속/제약 표기와 정합), タスク→작업. 추가/수정/삭제 문구는
 // goals_api.go 의 errGoalTaskDeleting* 와 같은 문형이고, kind 검증은 intercept.go 의
 // "값은 … 중 하나여야 합니다" 패턴을 따른다.
 const (
@@ -32,8 +32,8 @@ const (
 	errConstraintKindInvalid        = "kind 값은 allow 또는 deny 중 하나여야 합니다"
 )
 
-// constraintInjectPlanner / constraintInjectWorker 报告是否把操作约束注入对应 agent 的
-// 系统提示(默认开)。作为 resolver 传给 planner/worker,每轮读 → 改开关即时生效。
+// constraintInjectPlanner / constraintInjectWorker は、操作の制約を対応する agent の
+// システムプロンプトに注入するかを報告する(既定はオン)。resolver として planner/worker に渡し、ラウンドごとに読む → 切り替えを変えればすぐ効く。
 func (s *Server) constraintInjectPlanner() bool {
 	return s.m.pg.GetBool(settingConstraintsInjectPlanner, true)
 }
@@ -42,7 +42,7 @@ func (s *Server) constraintInjectWorker() bool {
 	return s.m.pg.GetBool(settingConstraintsInjectWorker, true)
 }
 
-// listConstraints 返回本任务的全部操作约束(allow 在前、deny 在后)。
+// listConstraints はこのタスクのすべての操作の制約(allow が先、deny が後)を返す。
 func (s *Server) listConstraints(w http.ResponseWriter, r *http.Request) {
 	t, ok := s.m.Task(r.PathValue("id"))
 	if !ok {
@@ -57,7 +57,7 @@ func (s *Server) listConstraints(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"constraints": constraintDTOs(rows)})
 }
 
-// addConstraint 人工新增一条操作约束(kind=allow|deny)。不通知 planner。
+// addConstraint は人が操作の制約を1件追加する(kind=allow|deny)。planner には知らせない。
 func (s *Server) addConstraint(w http.ResponseWriter, r *http.Request) {
 	t, ok := s.m.Task(r.PathValue("id"))
 	if !ok {
@@ -96,7 +96,7 @@ func (s *Server) addConstraint(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, ConstraintDTO{ID: strconv.FormatInt(id, 10), Kind: kind, Text: text, Origin: "human"})
 }
 
-// editConstraint 人工修改一条约束(kind + text)。不通知 planner。
+// editConstraint は人が制約を1件変える(kind + text)。planner には知らせない。
 func (s *Server) editConstraint(w http.ResponseWriter, r *http.Request) {
 	t, ok := s.m.Task(r.PathValue("id"))
 	if !ok {
@@ -139,7 +139,7 @@ func (s *Server) editConstraint(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, ConstraintDTO{ID: strconv.FormatInt(cid, 10), Kind: kind, Text: text})
 }
 
-// deleteConstraint 人工删除一条约束。不通知 planner。
+// deleteConstraint は人が制約を1件削除する。planner には知らせない。
 func (s *Server) deleteConstraint(w http.ResponseWriter, r *http.Request) {
 	t, ok := s.m.Task(r.PathValue("id"))
 	if !ok {
