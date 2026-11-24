@@ -8,21 +8,21 @@ import (
 	"testing"
 )
 
-// 本文件锁住通用 Webhook 模板的**能力边界**。
+// このファイルは汎用 Webhook のテンプレートの**能力の境界**を固定する。
 //
-// 这是全包唯一「用户提供的字符串会被当代码求值」的地方，所以要明确它能做什么、
-// 不能做什么，并用测试把这些性质固定下来——否则将来有人顺手给模板上下文加个
-// 方法、或在 FuncMap 里加个 readFile，能力面就静默扩大了，而 diff 看起来
-// 只是一个无害的小函数。
+// ここはパッケージ全体で唯一「ユーザーが渡した文字列がコードとして評価される」場所なので、何ができて
+// 何ができないかをはっきりさせ、その性質をテストで固定する必要がある——さもないと将来だれかが気軽にテンプレートのコンテキストに
+// メソッドを足したり、FuncMap に readFile を足したりして、能力の面が黙って広がり、しかも diff は
+// 無害な小さい関数にしか見えない。
 
-// TestTemplateContextHasNoMethods 是最重要的一条。
+// TestTemplateContextHasNoMethods が最も重要なテスト。
 //
-// text/template 会调用导出方法（{{.Foo}} 既能取字段也能调方法）。所以模板上下文
-// 只要能接触到**任何**带导出方法的类型，就等于把那些方法暴露给了模板作者。
-// 本功能的上下文刻意全是纯数据（只有导出字段、零方法）。
+// text/template は公開メソッドを呼ぶ（{{.Foo}} はフィールドの取得もメソッドの呼び出しもできる）。そのためテンプレートのコンテキストが
+// 公開メソッドを持つ**いずれかの**型に触れられれば、それらのメソッドをテンプレートの作者に公開したのと同じになる。
+// この機能のコンテキストはわざとすべて純粋なデータ（公開フィールドだけで、メソッドはゼロ）にしている。
 //
-// 若这条失败：说明有人给 webhookTemplateData / webhookItem 加了方法。
-// 在决定放行之前，先想清楚那个方法能不能被模板用来读取不希望暴露的东西。
+// これが失敗したら：だれかが webhookTemplateData / webhookItem にメソッドを足したということだ。
+// 通すと決める前に、そのメソッドがテンプレートから公開したくないものを読むのに使えないかをよく考えること。
 func TestTemplateContextHasNoMethods(t *testing.T) {
 	for _, v := range []any{webhookTemplateData{}, webhookItem{}} {
 		typ := reflect.TypeOf(v)
@@ -31,16 +31,16 @@ func TestTemplateContextHasNoMethods(t *testing.T) {
 			for i := 0; i < n; i++ {
 				names = append(names, typ.Method(i).Name)
 			}
-			t.Fatalf("%s 暴露了 %d 个方法（%s）：text/template 可以调用它们，"+
-				"等于把这些方法的能力开放给了模板作者", typ.Name(), n, strings.Join(names, ", "))
+			t.Fatalf("%s が %d 個のメソッド（%s）を公開している：text/template はそれらを呼べるので、"+
+				"これらのメソッドの能力をテンプレートの作者に開放したのと同じになる", typ.Name(), n, strings.Join(names, ", "))
 		}
 	}
 }
 
-// TestTemplateFuncsAreMinimal 锁住暴露给模板的函数集合。
+// TestTemplateFuncsAreMinimal はテンプレートに公開する関数の集合を固定する。
 //
-// FuncMap 里每多一个函数就多一项能力。当前只有 json / jsons，作用是把值序列化
-// 成 JSON 片段——不能读文件、不能发请求、不能执行命令。
+// FuncMap に関数が1つ増えるごとに能力が1つ増える。いまは json / jsons だけで、役割は値を
+// JSON の断片にシリアライズすること——ファイルを読めず、リクエストを送れず、コマンドを実行できない。
 func TestTemplateFuncsAreMinimal(t *testing.T) {
 	var got []string
 	for name := range webhookTemplateFuncs {
@@ -49,58 +49,58 @@ func TestTemplateFuncsAreMinimal(t *testing.T) {
 	sort.Strings(got)
 	want := []string{"json", "jsons"}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("模板函数集合变了：得到 %v，期望 %v。新增函数前请确认它不会扩大能力面"+
-			"（不能读写文件、不能发起网络请求、不能执行命令）", got, want)
+		t.Fatalf("テンプレートの関数の集合が変わった：%v を得たが、期待値は %v。関数を足す前に、それが能力の面を広げないことを確かめること"+
+			"（ファイルを読み書きできない、ネットワークのリクエストを送れない、コマンドを実行できない）", got, want)
 	}
 }
 
-// TestTemplateCannotReachUnknownData 覆盖模板里的越界访问：
-// 访问不存在的东西必须失败，而不是回显点什么；且失败信息不得带出内部数据。
+// TestTemplateCannotReachUnknownData はテンプレートでの範囲外のアクセスを扱う：
+// 存在しないものへのアクセスは必ず失敗すべきで、何かを返してはならない。しかも失敗のメッセージで内部のデータを持ち出してはならない。
 func TestTemplateCannotReachUnknownData(t *testing.T) {
 	_, err := renderWebhookBody(`{"x": {{.Environment}}, "y": {{.Env}}}`, singleMsg())
 	if err == nil {
-		t.Fatal("访问不存在的字段应报错")
+		t.Fatal("存在しないフィールドへのアクセスはエラーにすべき")
 	}
-	// 错误里不能出现模板上下文里的真实内容（漏洞标题/摘要）。
-	for _, leak := range []string{"SQL注入", "参数 id"} {
+	// エラーにテンプレートのコンテキストの本物の内容（脆弱性のタイトル/要約）が出てはならない。
+	for _, leak := range []string{"SQLインジェクション", "引数 id"} {
 		if strings.Contains(err.Error(), leak) {
-			t.Errorf("模板错误泄露了消息内容 %q: %v", leak, err)
+			t.Errorf("テンプレートのエラーがメッセージの内容 %q を漏らした: %v", leak, err)
 		}
 	}
 }
 
-// TestTemplateRenderFailsPermanently 模板写错属于配置错误，重试不会自愈。
-// 若被判成可重试，一条坏模板会让每次投递都白跑三轮退避。
+// TestTemplateRenderFailsPermanently テンプレートの書き間違いは設定の誤りで、再試行しても直らない。
+// 再試行できると判定されると、壊れたテンプレート1つで配信のたびに3回の待ち時間を無駄にする。
 func TestTemplateRenderFailsPermanently(t *testing.T) {
 	cfg := map[string]any{
 		"url":           "https://example.com/hook",
 		"body_template": `{{.Items.`,
 	}
 	if err := (webhookChannel{}).Validate(cfg); err == nil {
-		t.Fatal("模板语法错误应在保存时就被拦下")
+		t.Fatal("テンプレートの構文エラーは保存時に止められるべき")
 	}
-	// 即便绕过校验直接投递，也必须判永久失败而不是反复重试。
+	// 検証をすり抜けて直接配信した場合でも、繰り返し再試行せずに恒久的な失敗と判定しなければならない。
 	_, err := (webhookChannel{}).Send(context.Background(), cfg, singleMsg())
 	if err == nil || !IsPermanent(err) {
-		t.Fatalf("坏模板应判永久失败，得到 %v", err)
+		t.Fatalf("壊れたテンプレートは恒久的な失敗と判定すべきだが、%v を得た", err)
 	}
 }
 
-// TestTemplateCanOnlyProduceJSON 覆盖「模板渲染结果必须是合法 JSON」这条约束。
-// 它顺带挡住了「用模板生成纯文本去触发别的协议」这类用法。
+// TestTemplateCanOnlyProduceJSON は「テンプレートの描画結果は正しい JSON でなければならない」という制約を扱う。
+// これでついでに「テンプレートで平文を生成して別のプロトコルを起動する」ような使い方も防げる。
 func TestTemplateCanOnlyProduceJSON(t *testing.T) {
-	// 合法模板能过。
+	// 正しいテンプレートは通る。
 	ok := map[string]any{"url": "https://example.com/hook", "body_template": `{"t":{{json .Title}}}`}
 	if err := (webhookChannel{}).Validate(ok); err != nil {
-		t.Fatalf("合法模板应通过校验: %v", err)
+		t.Fatalf("正しいテンプレートは検証を通るべき: %v", err)
 	}
-	// 渲染出非 JSON 时必须拒绝（而不是原样发出去）。
+	// JSON でないものを描画したら必ず拒否する（そのまま送らない）。
 	bad := map[string]any{"url": "http://127.0.0.1:1/hook", "body_template": `not json {{.Count}}`}
 	_, err := (webhookChannel{}).Send(context.Background(), bad, singleMsg())
 	if err == nil || !IsPermanent(err) {
-		t.Fatalf("渲染出非 JSON 应判永久失败，得到 %v", err)
+		t.Fatalf("JSON でないものを描画したら恒久的な失敗と判定すべきだが、%v を得た", err)
 	}
 	if !strings.Contains(err.Error(), "올바른 JSON") {
-		t.Errorf("错误信息应说明是 JSON 问题，得到 %v", err)
+		t.Errorf("エラーメッセージは JSON の問題であることを説明すべきだが、%v を得た", err)
 	}
 }

@@ -15,13 +15,13 @@ import (
 	"time"
 )
 
-// sumsAsset 是 release.yml 生成的校验和清单，覆盖 Release 里全部 zip。
+// sumsAsset は release.yml が生成するチェックサムの一覧で、Release のすべての zip を対象とする。
 const sumsAsset = "SHA256SUMS"
 
-// maxBinarySize 限制解压出来的二进制体积，防止畸形 zip 把磁盘写满。
+// maxBinarySize は展開したバイナリの大きさを制限し、不正な zip でディスクが埋まるのを防ぐ。
 const maxBinarySize = 512 << 20 // 512 MiB
 
-// Phase 是升级过程中的阶段，直接用作 SSE 事件里的 phase 字段。
+// Phase は更新の過程の段階で、SSE イベントの phase フィールドにそのまま使う。
 type Phase string
 
 const (
@@ -33,17 +33,17 @@ const (
 	PhaseFailed   Phase = "failed"
 )
 
-// Progress 由调用方提供，用来把进度推给前端。pct 仅在下载阶段有意义（0-100），
-// 其余阶段传 -1。
+// Progress は呼び出し側が渡し、進み具合をフロントエンドに送るのに使う。pct はダウンロードの段階でだけ意味を持ち（0-100）、
+// それ以外の段階では -1 を渡す。
 type Progress func(ph Phase, pct int, msg string)
 
-// Stage 下载指定 Release 的当前平台发布包，校验后把新二进制暂存为 artex.new。
+// Stage は指定した Release の現在のプラットフォーム用パッケージをダウンロードし、検証したうえで新しいバイナリを artex.new として一時保存する。
 //
-// 走的是完整 zip 而不是裸二进制，理由有两个：现有 Release 的 SHA256SUMS 本来就
-// 只覆盖 zip，走 zip 不需要改 CI，也能兼容已经发布出去的历史版本；zip 里还带着
-// skills/，为将来同步内置 skill 留了口子。代价只是多下载 skills 那几百 KB。
+// バイナリ単体でなく zip 全体を使う理由は2つある：既存の Release の SHA256SUMS はもともと
+// zip しか対象にしていないので、zip を使えば CI を変えずに済み、すでに公開した過去の版とも互換を保てる。さらに zip には
+// skills/ も入っているので、将来組み込みの skill を同期する余地を残せる。代償は skills の数百 KB を余分にダウンロードすることだけ。
 //
-// 函数返回即代表暂存完成，调用方随后优雅关闭并以 ExitRestart 退出。
+// 関数が戻った時点で一時保存は完了しており、呼び出し側はこのあと穏やかに停止して ExitRestart で終了する。
 func Stage(ctx context.Context, c *http.Client, rel *Release, currentVersion string, prog Progress) error {
 	if prog == nil {
 		prog = func(Phase, int, string) {}
@@ -72,8 +72,8 @@ func Stage(ctx context.Context, c *http.Client, rel *Release, currentVersion str
 		return fmt.Errorf("%s 에 %s 항목이 없어 검증되지 않은 바이너리 설치를 거부합니다", sumsAsset, name)
 	}
 
-	// 临时文件全部落在目标目录里，保证最后的 rename 是同一文件系统内的原子操作
-	// （跨设备 rename 会失败，而 /tmp 常常是独立挂载点）。
+	// 一時ファイルはすべて宛先のディレクトリに置き、最後の rename が同じファイルシステム内のアトミックな操作になるようにする
+	// （デバイスをまたぐ rename は失敗し、/tmp はしばしば別のマウントポイントになっている）。
 	zipPath := p.New + ".zip.part"
 	binPath := p.New + ".part"
 	defer func() {
@@ -100,8 +100,8 @@ func Stage(ctx context.Context, c *http.Client, rel *Release, currentVersion str
 		return fmt.Errorf("새 버전이 현재 시스템에서 실행되지 않습니다: %w", err)
 	}
 
-	// 暂存件自己的 sha256 单独存一份：下次启动换装前还要再校验一次，
-	// 防止暂存后到重启前这段时间里文件被改动或写坏。
+	// 一時ファイル自身の sha256 を別に保存しておく：次回の起動で差し替える前にもう一度検証し、
+	// 一時保存から再起動までの間にファイルが変えられたり壊れたりするのを防ぐ。
 	binSum, err := fileSHA256(binPath)
 	if err != nil {
 		return fmt.Errorf("새 바이너리 체크섬 계산 실패: %w", err)
@@ -119,7 +119,7 @@ func Stage(ctx context.Context, c *http.Client, rel *Release, currentVersion str
 		To:       strings.TrimPrefix(rel.TagName, "v"),
 		StagedAt: time.Now().Unix(),
 	}); err != nil {
-		// 标记只影响自动回滚能力，暂存件本身已就位，不因此中断升级。
+		// マーカーが影響するのは自動ロールバックの能力だけで、一時ファイル自体はもう配置済みなので、これを理由に更新を中断しない。
 		prog(PhaseStaged, -1, "경고: 업데이트 표시 파일 기록에 실패해 이번 업데이트는 자동 롤백 보호를 받지 못합니다")
 	}
 
@@ -127,7 +127,7 @@ func Stage(ctx context.Context, c *http.Client, rel *Release, currentVersion str
 	return nil
 }
 
-// fetchSums 下载并解析 SHA256SUMS，返回 文件名 → 十六进制摘要。
+// fetchSums は SHA256SUMS をダウンロードして解析し、ファイル名 → 16進数のダイジェスト を返す。
 func fetchSums(ctx context.Context, c *http.Client, rel *Release) (map[string]string, error) {
 	asset, ok := rel.FindAsset(sumsAsset)
 	if !ok {
@@ -150,16 +150,16 @@ func fetchSums(ctx context.Context, c *http.Client, rel *Release) (map[string]st
 	return out, nil
 }
 
-// parseSums 解析 sha256sum 风格的清单，返回 文件名 → 十六进制摘要。
+// parseSums は sha256sum 形式の一覧を解析し、ファイル名 → 16進数のダイジェスト を返す。
 //
-// 第一个字段必须是 64 位十六进制才收录。只按"恰好两个字段"判断是不够的——
-// 任意一行两个单词的说明文字都会被当成合法条目，把垃圾值塞进摘要表，
-// 真正的资产反而可能匹配到错误的摘要。
+// 1つ目のフィールドが 64 桁の16進数のときだけ採用する。「ちょうど2つのフィールド」だけで判断するのは不十分で——
+// 2語から成る説明文の行がどれも正当な項目とみなされ、ダイジェストの表にごみの値が入り、
+// 本物の資産がかえって誤ったダイジェストに一致してしまうおそれがある。
 func parseSums(raw string) map[string]string {
 	out := map[string]string{}
 	for line := range strings.Lines(raw) {
-		// 格式为 "<sha256>  <filename>"（sha256sum 用双空格；shasum 的二进制
-		// 模式会给文件名加 * 前缀）。
+		// 形式は "<sha256>  <filename>"（sha256sum は2つの空白を使う。shasum のバイナリ
+		// モードはファイル名に * の接頭辞を付ける）。
 		fields := strings.Fields(strings.TrimSpace(line))
 		if len(fields) != 2 || !isHexSHA256(fields[0]) {
 			continue
@@ -187,7 +187,7 @@ func isHexSHA256(s string) bool {
 	return true
 }
 
-// download 把资产写入 dst，同时计算 SHA256 并按 Content-Length 汇报进度。
+// download は資産を dst に書き込み、同時に SHA256 を計算し、Content-Length をもとに進み具合を報告する。
 func download(ctx context.Context, c *http.Client, a Asset, dst string, prog Progress) (string, error) {
 	body, err := get(ctx, c, a.URL)
 	if err != nil {
@@ -215,7 +215,7 @@ func download(ctx context.Context, c *http.Client, a Asset, dst string, prog Pro
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// get 发起一个受白名单约束的 GET，返回响应体。
+// get は許可リストに縛られた GET を発行し、レスポンスボディを返す。
 func get(ctx context.Context, c *http.Client, rawURL string) (io.ReadCloser, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
@@ -236,10 +236,10 @@ func get(ctx context.Context, c *http.Client, rawURL string) (io.ReadCloser, err
 	return resp.Body, nil
 }
 
-// extractBinary 从发布包里取出 artex 可执行文件。
+// extractBinary は配布パッケージから artex の実行ファイルを取り出す。
 //
-// 包内结构是 artex-<版本>-<os>-<arch>/artex，但这里按**基名**匹配而不是拼完整
-// 路径：版本号在包名里出现过一次，拼错一个字符就整个升级失败，按基名找更耐改。
+// パッケージ内の構造は artex-<バージョン>-<os>-<arch>/artex だが、ここでは完全なパスを組み立てず**ベース名**で一致させる：
+// バージョン番号はパッケージ名に一度出てくるので、1文字でも組み立てを誤ると更新全体が失敗する。ベース名で探すほうが変更に強い。
 func extractBinary(zipPath, dst string) error {
 	want := "artex"
 	if runtime.GOOS == "windows" {
@@ -282,8 +282,8 @@ func extractBinary(zipPath, dst string) error {
 	return fmt.Errorf("릴리스 패키지에서 %s 파일을 찾지 못했습니다", want)
 }
 
-// checkWritable 提前确认目录可写。没有这一步，非 root 运行、或二进制被放在系统
-// 目录时，会在下载完几十 MB 之后才在换装那一刻失败。
+// checkWritable はディレクトリが書き込み可能かを先に確かめる。これがないと、root 以外で動かしたり、バイナリがシステムの
+// ディレクトリに置かれていたりするとき、数十 MB をダウンロードし終えたあとの差し替えの瞬間になって失敗する。
 func checkWritable(dir string) error {
 	probe, err := os.CreateTemp(dir, ".artex-update-probe-*")
 	if err != nil {
@@ -295,7 +295,7 @@ func checkWritable(dir string) error {
 	return nil
 }
 
-// progressWriter 统计已写字节并限频汇报，避免每个 32KiB 分块都推一条 SSE。
+// progressWriter は書き込んだバイト数を数え、報告の頻度を抑えて、32KiB の塊ごとに SSE を1件送るのを避ける。
 type progressWriter struct {
 	total   int64
 	written int64

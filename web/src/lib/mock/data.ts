@@ -470,7 +470,7 @@ export const assets: Asset[] = [
     params: [{ name: "q", in: "query" }],
     last_seen: T("2026-07-26T02:14:00Z"),
   },
-  // 内网资产（DMZ→内网横向发现）
+  // 内部のネットワークの資産（DMZ→内部のネットワークへの横展開で見つけた）
   {
     id: 19,
     type: "ip",
@@ -571,9 +571,9 @@ export const assetCounts: Record<string, number> = assets.reduce<Record<string, 
   return m;
 }, {});
 
-// assetRef 把资产 id 变成 finding 上挂的资产引用(label 与后端 coverageNodeLabel
-// 的取值顺序一致:URL > 域名 > IP > 应用名)。「按资产」视图的树就是靠这些引用
-// 把发现挂到资产上的。
+// assetRef は資産の id を finding にぶら下げる資産の参照にする(label はバックエンドの coverageNodeLabel
+// と同じ取り方の順:URL > ドメイン > IP > アプリ名)。「資産ごと」の表示の木はこれらの参照で
+// 発見を資産にぶら下げる。
 function assetRef(id: number): FindingAsset {
   const asset = assets.find((candidate) => candidate.id === id);
   if (!asset) throw new Error(`mock assetRef: unknown asset ${id}`);
@@ -716,7 +716,7 @@ export const findings: Finding[] = [
     task_description: "shop.acme.com payment and order flow",
     ts: T("2026-07-23T15:00:00Z"),
   },
-  // ── 外网→内网纵深链路上的高危发现（active task）──
+  // ── 外部→内部のネットワークへ深く入る連なりの高い危険の発見（active task）──
   {
     id: "f-11",
     vulnclass: "Hardcoded Credentials",
@@ -823,9 +823,9 @@ export const findings: Finding[] = [
 ];
 
 // ── Exploration graph (active task) ──────────────────────────────────────────
-// 现行模型：根是 fact/state=origin（渲染为「起点」）；payload 为 JSON 字符串，
-// goal 取 text、其余取 summary。结构：根→目标(spawns)→意图(spawns)→事实/漏洞(yields)，
-// 漏洞→目标(proves)，提示→意图(derived_from)。
+// いまのモデル：根は fact/state=origin（「出発点」として描画）；payload は JSON の文字列で、
+// goal は text を、ほかは summary を取る。構造：根→目標(spawns)→意図(spawns)→事実/脆弱性(yields)、
+// 脆弱性→目標(proves)、ヒント→意図(derived_from)。
 const P = (o: Record<string, string>) => JSON.stringify(o);
 
 export const explorationGraph: { nodes: TaskNode[]; edges: Edge[] } = {
@@ -840,7 +840,7 @@ export const explorationGraph: { nodes: TaskNode[]; edges: Edge[] } = {
       ts: T("2026-07-24T09:12:00Z"),
     },
 
-    // ── 目标（由 goals agent 拆解，随发现逐步加码到内网靶标）──
+    // ── 目標（goals agent が分解し、発見に応じて内部のネットワークの標的まで段階的に引き上げる）──
     {
       id: "g1",
       type: "goal",
@@ -880,7 +880,7 @@ export const explorationGraph: { nodes: TaskNode[]; edges: Edge[] } = {
       ts: T("2026-07-25T20:00:00Z"),
     },
 
-    // ── 第 1 层 · 外网侦察 / 外部漏洞 ──
+    // ── 第 1 層 · 外部の偵察 / 外部の脆弱性 ──
     {
       id: "i1",
       type: "intent",
@@ -936,7 +936,7 @@ export const explorationGraph: { nodes: TaskNode[]; edges: Edge[] } = {
       ts: T("2026-07-25T20:20:00Z"),
     },
 
-    // ── 第 2 层 · 突破 DMZ 建立立足点 ──
+    // ── 第 2 層 · DMZ を破って足場を築く ──
     {
       id: "i6",
       type: "intent",
@@ -965,7 +965,7 @@ export const explorationGraph: { nodes: TaskNode[]; edges: Edge[] } = {
       ts: T("2026-07-25T16:00:00Z"),
     },
 
-    // ── 第 3 层 · 内网横向纵深（多层测试）──
+    // ── 第 3 層 · 内部のネットワークへの横展開と深掘り（多層のテスト）──
     {
       id: "i9",
       type: "intent",
@@ -1012,7 +1012,7 @@ export const explorationGraph: { nodes: TaskNode[]; edges: Edge[] } = {
       ts: T("2026-07-25T23:50:00Z"),
     },
 
-    // ── 事实 ──
+    // ── 事実 ──
     {
       id: "fa1",
       type: "fact",
@@ -1133,7 +1133,7 @@ export const explorationGraph: { nodes: TaskNode[]; edges: Edge[] } = {
       ts: T("2026-07-25T23:20:00Z"),
     },
 
-    // ── 漏洞 ──
+    // ── 脆弱性 ──
     {
       id: "fi1",
       type: "finding",
@@ -1218,7 +1218,7 @@ export const explorationGraph: { nodes: TaskNode[]; edges: Edge[] } = {
       ts: T("2026-07-26T00:20:00Z"),
     },
 
-    // ── 提示（主 agent 注入）──
+    // ── ヒント（メイン agent が入れた）──
     {
       id: "h1",
       type: "hint",
@@ -1250,12 +1250,12 @@ export const explorationGraph: { nodes: TaskNode[]; edges: Edge[] } = {
     },
   ],
   edges: [
-    // 根 → 目标
+    // 根 → 目標
     { src: "root", dst: "g1", rel: "spawns" },
     { src: "root", dst: "g2", rel: "spawns" },
     { src: "root", dst: "g3", rel: "spawns" },
     { src: "root", dst: "g4", rel: "spawns" },
-    // 目标 → 意图
+    // 目標 → 意図
     { src: "g1", dst: "i1", rel: "spawns" },
     { src: "g1", dst: "i2", rel: "spawns" },
     { src: "g1", dst: "i3", rel: "spawns" },
@@ -1270,7 +1270,7 @@ export const explorationGraph: { nodes: TaskNode[]; edges: Edge[] } = {
     { src: "g4", dst: "i11", rel: "spawns" },
     { src: "g4", dst: "i12", rel: "spawns" },
     { src: "g4", dst: "i13", rel: "spawns" },
-    // 意图 → 事实 / 漏洞（产出）
+    // 意図 → 事実 / 脆弱性（産物）
     { src: "i1", dst: "fa1", rel: "yields" },
     { src: "i4", dst: "fa2", rel: "yields" },
     { src: "i2", dst: "fi1", rel: "yields" },
@@ -1292,7 +1292,7 @@ export const explorationGraph: { nodes: TaskNode[]; edges: Edge[] } = {
     { src: "i12", dst: "fa10", rel: "yields" },
     { src: "i12", dst: "fiKerb", rel: "yields" },
     { src: "i13", dst: "fiDC", rel: "yields" },
-    // 事实 → 新意图（事实驱动的多层递进）
+    // 事実 → 新しい意図（事実が動かす多層の段階的な前進）
     { src: "fa3", dst: "i7", rel: "derived_from" },
     { src: "fa4", dst: "i8", rel: "derived_from" },
     { src: "fa4", dst: "i9", rel: "derived_from" },
@@ -1301,11 +1301,11 @@ export const explorationGraph: { nodes: TaskNode[]; edges: Edge[] } = {
     { src: "fa7", dst: "i12", rel: "derived_from" },
     { src: "fa9", dst: "i13", rel: "derived_from" },
     { src: "fa10", dst: "i13", rel: "derived_from" },
-    // 提示 → 意图
+    // ヒント → 意図
     { src: "h1", dst: "i2", rel: "derived_from" },
     { src: "h2", dst: "i11", rel: "derived_from" },
     { src: "h3", dst: "i10", rel: "derived_from" },
-    // 漏洞 → 证明目标达成
+    // 脆弱性 → 目標の達成を証明
     { src: "fi1", dst: "g1", rel: "proves" },
     { src: "fiRce", dst: "g3", rel: "proves" },
     { src: "fiDC", dst: "g4", rel: "proves" },
@@ -1317,13 +1317,13 @@ export const frontier: TaskNode[] = explorationGraph.nodes.filter(
   (n) => n.type === "intent" && (n.state === "open" || n.state === "running"),
 );
 
-// ── Activity（执行过程）─────────────────────────────────────────────────────
-// 会话由 sessions-tab 从「意图」派生（session.id = intent.id），transcript = 匹配
-// intent_id 的活动流。planner=worker "planner"、主 agent=worker "mainagent"。
-// 每个 worker 会话含完整工具执行链（tool_use → tool_result → …→ result）。
+// ── Activity（実行の過程）─────────────────────────────────────────────────────
+// 会話は sessions-tab が「意図」から導く（session.id = intent.id）。transcript = 一致する
+// intent_id の活動の流れ。planner=worker "planner"、メイン agent=worker "mainagent"。
+// worker の会話にはそれぞれツールの実行の連なりがまるごと入る（tool_use → tool_result → …→ result）。
 export const activity: Activity[] = [
-  // planner —— 每轮完整决策链：读态势 → 拉 worker 产出对照 → 判目标 → add_intent 派方向
-  // ── 第 0 轮 · 目标拆解与首批意图（2026-07-24 09:12）──
+  // planner —— ラウンドごとの判断の連なり全体：状況を読む → worker の産物を取って照らす → 目標を判定 → add_intent で方向を出す
+  // ── 第 0 ラウンド · 目標の分解と最初の意図（2026-07-24 09:12）──
   {
     seq: 1000,
     worker: "planner",
@@ -1393,7 +1393,7 @@ export const activity: Activity[] = [
       "This round derived the first four intents: i1 asset recon, i2 back-office passwords, i4 injection, i5 API authorization bypass. g1 proceeds via i2 and g2 via i4/i5, with both goals pursuing independent entry points. Once workers produce facts, I will reinforce along whichever chain they feed.",
   },
 
-  // ── 第 1 轮 · 攻击面加码（2026-07-25 14:12）──
+  // ── 第 1 ラウンド · 攻撃面の引き上げ（2026-07-25 14:12）──
   {
     seq: 1100,
     worker: "planner",
@@ -1461,7 +1461,7 @@ export const activity: Activity[] = [
       'Escalating the situation: the source code + hardcoded internal network password + Fastjson RCE form an entirely new breach path. Requested registration of g3 "breach the DMZ from the external network and establish an internal foothold" at the goal layer, and dispatched i6 (fingerprint/CVE correlation) and i7 (RCE triggering). The DMZ privilege-escalation step depends on a shell, so it is logged as a to-do and dispatched next round.',
   },
 
-  // ── 第 2 轮 · 立足点已建，转内网（2026-07-25 20:25）──
+  // ── 第 2 ラウンド · 足場ができたので内部のネットワークへ（2026-07-25 20:25）──
   {
     seq: 1200,
     worker: "planner",
@@ -1545,7 +1545,7 @@ export const activity: Activity[] = [
       'g3 achieved; the attack surface has shifted from the external to the internal network. Requested registration of g4 "move laterally through the internal network to compromise the target domain controller DC01", and dispatched i9 (host discovery) plus three parallel lateral-movement intents i10/i11/i12. Credential reuse is anchored directly to faCreds — reinvesting the password obtained from the external source code leak into internal lateral movement.',
   },
 
-  // ── 第 3 轮 · 靶标达成复盘（2026-07-26 00:25）──
+  // ── 第 3 ラウンド · 標的の達成の振り返り（2026-07-26 00:25）──
   {
     seq: 1300,
     worker: "planner",
@@ -1610,7 +1610,7 @@ export const activity: Activity[] = [
       'g4 wrapped up; the internal/external path is fully breached (external RCE → DMZ → internal network → domain controller). Checking uncovered directions one by one. g2 "access sensitive user data" is still one step short, but the existing i3 (back-office user endpoints) + i5 (API IDOR) already cover that direction and both are running. Since there is no [fundamentally different uncovered new direction] this round, per the restraint principle: zero new intents, wait for i3/i5 output.',
   },
 
-  // ── 第 4 轮 · 后台达成，收敛 g2（2026-07-26 03:55）──
+  // ── 第 4 ラウンド · 管理画面を達成し、g2 を収束（2026-07-26 03:55）──
   {
     seq: 1400,
     worker: "planner",
@@ -1684,7 +1684,7 @@ export const activity: Activity[] = [
       "g1 achieved (3 of 4 goals met: g1/g3/g4). g2 strictly enforces its quantitative acceptance criterion. Merely entering the back office does not count — confirmation requires actually acquiring bulk user data. Raised i3/i5 to priority 9 and sharpened them into data-acquisition intents; once the workers report back, the whole task can be wrapped up.",
   },
 
-  // work#1 · i1 子域枚举与端口扫描（done）
+  // work#1 · i1 サブドメインの列挙とポートスキャン（done）
   {
     seq: 10,
     worker: "work#1",
@@ -1770,7 +1770,7 @@ export const activity: Activity[] = [
     cache_write_tokens: 9000,
   },
 
-  // work#2 · i2 后台默认口令（done，证明 g1）
+  // work#2 · i2 管理画面の既定のパスワード（done、g1 を証明）
   {
     seq: 20,
     worker: "work#2",
@@ -1876,7 +1876,7 @@ export const activity: Activity[] = [
     cache_write_tokens: 7200,
   },
 
-  // work#4 · i4 SQL 注入（done）
+  // work#4 · i4 SQL インジェクション（done）
   {
     seq: 40,
     worker: "work#4",
@@ -2046,7 +2046,7 @@ export const activity: Activity[] = [
       "Iterating across the id range in bulk to assess the scale of data accessible via the authorization bypass (not exporting yet, to avoid triggering the interception rules).",
   },
 
-  // work#3 · i3 后台用户接口枚举（running）
+  // work#3 · i3 管理画面のユーザーのインターフェースの列挙（running）
   {
     seq: 60,
     worker: "work#3",
@@ -2088,7 +2088,7 @@ export const activity: Activity[] = [
       "Confirmed an entry point exists for bulk-reading user data. The export action trips the destructive/exfiltration rules, so an interception approval has been submitted and is awaiting approval.",
   },
 
-  // workG · ig .git 源码泄露与硬编码凭据（done）
+  // workG · ig .git のソースの漏えいと決め打ちの資格情報（done）
   {
     seq: 310,
     worker: "workG",
@@ -2176,7 +2176,7 @@ export const activity: Activity[] = [
     cache_write_tokens: 8000,
   },
 
-  // work#6 · i6 shop 指纹与 CVE 关联（done）
+  // work#6 · i6 shop のフィンガープリントと CVE の関連づけ（done）
   {
     seq: 320,
     worker: "work#6",
@@ -2243,7 +2243,7 @@ export const activity: Activity[] = [
     cache_write_tokens: 6000,
   },
 
-  // work#7 · i7 反序列化 RCE 拿反弹 shell（done，证明 g3）
+  // work#7 · i7 デシリアライズの RCE でリバースシェルを取る（done、g3 を証明）
   {
     seq: 330,
     worker: "work#7",
@@ -2342,7 +2342,7 @@ export const activity: Activity[] = [
     cache_write_tokens: 12000,
   },
 
-  // work#8 · i8 立足点提权（done）
+  // work#8 · i8 足場での権限昇格（done）
   {
     seq: 340,
     worker: "work#8",
@@ -2419,7 +2419,7 @@ export const activity: Activity[] = [
     cache_write_tokens: 7000,
   },
 
-  // work#9 · i9 内网主机发现（done）
+  // work#9 · i9 内部のネットワークのホストの発見（done）
   {
     seq: 350,
     worker: "work#9",
@@ -2463,7 +2463,7 @@ export const activity: Activity[] = [
     cache_write_tokens: 8000,
   },
 
-  // work#10 · i10 内网凭据复用（running）
+  // work#10 · i10 内部のネットワークでの資格情報の使い回し（running）
   {
     seq: 360,
     worker: "work#10",
@@ -2503,7 +2503,7 @@ export const activity: Activity[] = [
     summary: "Compromised FS01 and is enumerating shared directories to find more credentials and sensitive files…",
   },
 
-  // work#11 · i11 Jenkins 未授权 RCE（done）
+  // work#11 · i11 Jenkins の認証なしの RCE（done）
   {
     seq: 370,
     worker: "work#11",
@@ -2674,7 +2674,7 @@ export const activity: Activity[] = [
     cache_write_tokens: 10000,
   },
 
-  // work#13 · i13 拿下域控 DC01（done，证明 g4）
+  // work#13 · i13 ドメインコントローラー DC01 を取る（done、g4 を証明）
   {
     seq: 390,
     worker: "work#13",
@@ -2772,7 +2772,7 @@ export const activity: Activity[] = [
     cache_write_tokens: 14000,
   },
 
-  // 主 agent（人在环路对话）
+  // メイン agent（人がループに入る会話）
   {
     seq: 70,
     worker: "mainagent",
@@ -3118,7 +3118,7 @@ export const llmProfiles: LLMProfile[] = [
     is_default: true,
     priority: 0,
     pool_exclude: false,
-    // anthropic 的字段名固定，故 max_tokens_field 恒为空。
+    // anthropic のフィールド名は決まっているので、max_tokens_field は常に空。
     max_tokens: 0,
     max_tokens_field: "",
   },
@@ -3137,7 +3137,7 @@ export const llmProfiles: LLMProfile[] = [
     is_default: false,
     priority: 10,
     pool_exclude: false,
-    // openai 格式 + 推理模型：上限走 max_completion_tokens。
+    // openai の形式 + 推論モデル：上限は max_completion_tokens を使う。
     max_tokens: 8192,
     max_tokens_field: "max_completion_tokens",
   },
@@ -3269,13 +3269,13 @@ const promptVersions: PromptVersion[] = [
     version: 3,
     ts: T("2026-07-25T10:00:00Z"),
     note: "Strengthened guidance for authorization-bypass detection",
-    template_text: "你是 ARTEX 的规划者……",
+    template_text: "あなたは ARTEX の計画者……",
   },
   {
     version: 2,
     ts: T("2026-07-20T10:00:00Z"),
     note: "Minor tuning of the initial version",
-    template_text: "你是 ARTEX 的规划者(v2)……",
+    template_text: "あなたは ARTEX の計画者(v2)……",
   },
 ];
 
@@ -3283,7 +3283,7 @@ export function agentDetail(key: string): AgentDetail {
   const a = agents.find((x) => x.key === key) ?? agents[1];
   return {
     agent: a,
-    prompt: `你是 ARTEX 的「${a.name}」。\n目标：{{.Goal}}\n资产概览：{{.AssetSummary}}\n路线提示：{{.RouteHint}}\n请基于以上信息推进探索，并通过工具把结果写回图。`,
+    prompt: `あなたは ARTEX の「${a.name}」。\n目標：{{.Goal}}\n資産の概要：{{.AssetSummary}}\n道筋のヒント：{{.RouteHint}}\n以上の情報をもとに探索を進め、ツールで結果を図に書き戻すこと。`,
     variables: promptVars,
     versions: promptVersions,
     visibility: { mcp: [1, 2], skill: ["api-recon", "playwright-cli"] },
@@ -3467,8 +3467,8 @@ export const settings: Settings = {
   noa_compaction: false,
 };
 
-// ── LLM 轮询（故障转移）──────────────────────────────────────────────────────
-// demo：激活配置正常，备用配置刚因余额不足熔断，正在冷却。
+// ── LLM のローテーション（フェイルオーバー）──────────────────────────────────────────────────────
+// demo：有効な設定は正常で、予備の設定は残高不足でちょうど遮断され、冷却中。
 export const llmPool: LLMPoolStatus = {
   enabled: true,
   bind_fallback: false,
@@ -3943,7 +3943,7 @@ export const conversationMessages: Record<number, Activity[]> = {
   ],
 };
 
-// ── 资产测试覆盖度（/tasks/{id}/coverage）──
+// ── 資産のテストのカバー率（/tasks/{id}/coverage）──
 export const coverage = {
   enabled: true,
   scope_rows: 4,
@@ -3958,7 +3958,7 @@ export const coverage = {
   ],
 };
 
-// ── 资产覆盖图（/tasks/{id}/coverage-graph）──
+// ── 資産のカバー率の図（/tasks/{id}/coverage-graph）──
 export const coverageGraph = {
   nodes: [
     { key: "c:1", kind: "company", label: "Acme Corp", tested: false, in_scope: false, company_id: 1 },
@@ -4086,8 +4086,8 @@ export const coverageGraph = {
   ],
 };
 
-// ── 资产在本任务关联的意图/事实/发现（/tasks/{id}/asset-refs）──
-// 播报板 demo:探索节点 → 其锚定资产。真实后端读 exploration_anchors,mock 里静态给几条。
+// ── 資産がこのタスクで関連づいた意図/事実/発見（/tasks/{id}/asset-refs）──
+// 実況ボードの demo:探索のノード → それが裏づける資産。本物のバックエンドは exploration_anchors を読み、mock では静的に数件与える。
 const NODE_ASSETS: Record<string, number[]> = {
   fi1: [3],
   fi2: [2, 4],
@@ -4129,7 +4129,7 @@ export function assetRefsFor(_assetId: number) {
   };
 }
 
-// ── 工作空间文件管理器（/workspace/*，demo：静态示例树）──
+// ── 作業スペースのファイルマネージャー（/workspace/*、demo：静的な見本の木）──
 const WS_TREE: Record<string, { name: string; dir: boolean; size: number; content?: string }[]> = {
   "": [
     { name: "t-001", dir: true, size: 0 },
@@ -4198,7 +4198,7 @@ export function workspaceRead(path: string) {
   return { path: key, size: f?.size ?? 0, binary: false, content: f?.content ?? "" };
 }
 
-// ── 工具执行历史（/commands）──
+// ── ツールの実行の履歴（/commands）──
 export const commandRecords = [
   {
     id: 1,
@@ -4252,7 +4252,7 @@ export const commandRecords = [
   },
 ];
 
-// ── LLM 录制（/llm/records、/llm/records/{id}）──
+// ── LLM の記録（/llm/records、/llm/records/{id}）──
 export const llmRecords = [
   {
     id: 1,
@@ -4329,8 +4329,13 @@ export function llmRecordDetail(id: number, records = llmRecords) {
     request_body: JSON.stringify(
       {
         model: item.model,
-        system: "你是一个授权渗透测试系统的「执行者」…（省略）",
-        messages: [{ role: "user", content: "开始执行 system 提示里的这条意图：只做它、只产生事实、做完即停。" }],
+        system: "あなたは認可されたペネトレーションテストのシステムの「実行者」…（省略）",
+        messages: [
+          {
+            role: "user",
+            content: "system の指示にあるこの意図の実行を始める：それだけをし、事実だけを生み、終わったら止まる。",
+          },
+        ],
         tools: ["bash", "insert_assets", "record_fact", "report_finding"],
       },
       null,
@@ -4351,19 +4356,28 @@ export function llmRecordDetail(id: number, records = llmRecords) {
       null,
       2,
     ),
-    // HTTP 原文：请求含被归一化视图丢弃的完整工具 schema，响应为原始 SSE 帧。
+    // HTTP の原文：リクエストにはそろえた見え方が捨てた完全なツールの schema を含み、応答は元の SSE のフレーム。
     raw_request: JSON.stringify({
       model: item.model,
       max_tokens: 8192,
       stream: true,
       system: [
-        { type: "text", text: "你是一个授权渗透测试系统的「执行者」…（省略）", cache_control: { type: "ephemeral" } },
+        {
+          type: "text",
+          text: "あなたは認可されたペネトレーションテストのシステムの「実行者」…（省略）",
+          cache_control: { type: "ephemeral" },
+        },
       ],
-      messages: [{ role: "user", content: "开始执行 system 提示里的这条意图：只做它、只产生事实、做完即停。" }],
+      messages: [
+        {
+          role: "user",
+          content: "system の指示にあるこの意図の実行を始める：それだけをし、事実だけを生み、終わったら止まる。",
+        },
+      ],
       tools: [
         {
           name: "bash",
-          description: "在目标环境中执行一条 shell 命令并返回其输出。",
+          description: "標的の環境で shell のコマンドを1つ実行し、その出力を返す。",
           input_schema: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
         },
       ],

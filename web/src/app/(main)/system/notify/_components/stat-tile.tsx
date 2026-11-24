@@ -2,8 +2,8 @@ import type { useTranslations } from "next-intl";
 
 import { Card, CardContent } from "@/components/ui/card";
 
-// 本文件被 client 页面引用，但自身是纯展示/纯函数，不直接调用 useTranslations。
-// formatBacklog 需要 i18n 单位文案，所以由调用方把 t 注入进来（tasks/approval-records 先例）。
+// このファイルは client のページから参照されるが、自身は純粋な表示/純粋な関数で、useTranslations を直接呼ばない。
+// formatBacklog は i18n の単位の文面を要るので、呼び出し側が t を渡す（tasks/approval-records の先例）。
 type Translator = ReturnType<typeof useTranslations>;
 
 export function StatTile({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: string }) {
@@ -18,7 +18,7 @@ export function StatTile({ label, value, hint, tone }: { label: string; value: s
   );
 }
 
-// formatBacklog 把积压毫秒数渲染成人看得懂的量级。
+// formatBacklog は溜まりのミリ秒を人にわかる桁で描く。
 export function formatBacklog(ms: number, t: Translator): string {
   if (!ms) return "—";
   if (ms < 60_000) return t("unit.sec", { n: Math.round(ms / 1000) });

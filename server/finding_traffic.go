@@ -257,7 +257,7 @@ type evidencePreview struct {
 // 피하려고 중국어 원문을 보존한다(F16 두뇌 경계 계열 — 표시/입력 분리는 별도 결정 대기).
 func readEvidencePreview(store *evidence.Store, snapshot db.TrafficEvidenceSnapshot, side string, offset, length int64) (out evidencePreview, err error) {
 	if offset < 0 || length < 0 {
-		return out, errors.New("offset / length 不能为负数")
+		return out, errors.New("offset / length は負の数にできない")
 	}
 	if length == 0 || length > 8192 {
 		length = 8192
@@ -268,7 +268,7 @@ func readEvidencePreview(store *evidence.Store, snapshot db.TrafficEvidenceSnaps
 	}
 	defer f.Close()
 	if offset > total {
-		return out, errors.New("offset 超出正文长度")
+		return out, errors.New("offset が本文の長さを超えている")
 	}
 	if _, err = f.Seek(offset, io.SeekStart); err != nil {
 		return out, err
@@ -291,7 +291,7 @@ func readEvidencePreview(store *evidence.Store, snapshot db.TrafficEvidenceSnaps
 	out = evidencePreview{Offset: offset, Total: total, NextOffset: offset + int64(len(raw)), Truncated: offset+int64(len(raw)) < total,
 		Binary: bytes.IndexByte(raw, 0) >= 0 || (offset == 0 && !utf8.Valid(raw))}
 	if out.Binary {
-		out.Content = fmt.Sprintf("[二进制正文，%d 字节；请下载查看]", total)
+		out.Content = fmt.Sprintf("[バイナリの本文、%d バイト；ダウンロードして見ること]", total)
 	} else {
 		out.Content = string(bytes.ToValidUTF8(raw, []byte("�")))
 	}
@@ -383,8 +383,8 @@ func (s *Server) getFindingTrafficBody(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) toolGetFindingTraffic() actool.CoreTool {
-	return roTool("get_finding_traffic", "读取漏洞已绑定的真实流量证据，不依赖捕获开关。finding_id 使用 report_finding JSON 返回的独立漏洞记录 ID（不是第一行的探索节点 ID）。先不传 binding_id 获取清单及 version；空清单是正常情况，TCP 等非 HTTP 漏洞或未采集时仍可依据文字/命令证据编写报告，不强制绑定。有绑定时按 binding_id、side(request/response)、offset 分段读取正文。写报告时将读取的 version 作为 evidence_version 传给 update_finding_report，后者 finding_id 仍使用探索节点 ID。",
-		objSchema(map[string]any{"finding_id": strParam("独立漏洞记录 ID"), "binding_id": strParam("清单里的绑定 ID，省略则返回清单"), "side": strParam("request 或 response，默认 response"), "offset": map[string]any{"type": "integer"}, "length": map[string]any{"type": "integer"}}, "finding_id"),
+	return roTool("get_finding_traffic", "脆弱性に結びつけた本物の通信の証拠を読む。取得の切り替えには依存しない。finding_id には report_finding の JSON が返した独立した脆弱性の記録 ID を使う（1行目の探索ノードの ID ではない）。まず binding_id を渡さずに一覧と version を得る；空の一覧は通常のことで、TCP など HTTP 以外の脆弱性や取得していないときも文/コマンドの証拠をもとに報告を書け、結びつけは強制しない。結びつけがあれば binding_id、side(request/response)、offset で本文を分けて読む。報告を書くときは読んだ version を evidence_version として update_finding_report に渡し、後者の finding_id には引き続き探索ノードの ID を使う。",
+		objSchema(map[string]any{"finding_id": strParam("独立した脆弱性の記録 ID"), "binding_id": strParam("一覧の結びつけの ID。省略すれば一覧を返す"), "side": strParam("request か response。既定は response"), "offset": map[string]any{"type": "integer"}, "length": map[string]any{"type": "integer"}}, "finding_id"),
 		func(ctx context.Context, in json.RawMessage) (actool.Result, error) {
 			var a struct {
 				FindingID      json.RawMessage `json:"finding_id"`

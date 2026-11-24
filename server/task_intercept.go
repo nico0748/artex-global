@@ -14,8 +14,8 @@ import (
 // action 열거값(block·allow)은 클라이언트가 그대로 주고받는 와이어 식별자라 원문을 유지한다.
 const errTaskInterceptInvalidAction = "action 은 block 또는 allow 여야 합니다"
 
-// 任务级资产拦截/允许规则的 CRUD。规则按 task_id 归属，仅对该任务生效：
-// action=block 拦截(禁止测试)，action=allow 允许(白名单)。执行判定见 db.EvaluateAssetGate。
+// タスク単位の資産の遮断/許可のルールの CRUD。ルールは task_id に属し、そのタスクにだけ効く：
+// action=block は遮断(テストを禁止)、action=allow は許可(ホワイトリスト)。実行の判定は db.EvaluateAssetGate を参照。
 
 type taskInterceptRuleReq struct {
 	Enabled bool   `json:"enabled"`
@@ -25,7 +25,7 @@ type taskInterceptRuleReq struct {
 	Note    string `json:"note"`
 }
 
-// validateTaskInterceptRuleReq 归一并校验；复用全局规则的 kind/pattern 校验器。
+// validateTaskInterceptRuleReq はそろえて検証する；全体のルールの kind/pattern の検証器を再利用する。
 func validateTaskInterceptRuleReq(req *taskInterceptRuleReq) error {
 	if req.Action == "" {
 		req.Action = "block"
@@ -37,11 +37,11 @@ func validateTaskInterceptRuleReq(req *taskInterceptRuleReq) error {
 	if err := validateAssetInterceptRuleReq(&v); err != nil {
 		return err
 	}
-	req.Pattern = v.Pattern // 已 trim
+	req.Pattern = v.Pattern // trim 済み
 	return nil
 }
 
-// buildTaskInterceptRules 校验创建任务时录入的任务级规则并转换为 db 输入形态。
+// buildTaskInterceptRules はタスクの作成時に入力したタスク単位のルールを検証し、db の入力の形に変える。
 func buildTaskInterceptRules(reqs []taskInterceptRuleReq) ([]db.TaskInterceptRuleInput, error) {
 	if len(reqs) == 0 {
 		return nil, nil

@@ -38,10 +38,10 @@ func compactIntents(ns []*db.Node, parentsOf, yieldsOf map[int64][]int64) []map[
 			m["asset_ids"] = []any{tg}
 		}
 		if ps := parentsOf[n.ID]; len(ps) > 0 {
-			m["parents"] = ps // 上游：本意图派生自哪些节点（多个事实可共同产生一个意图）
+			m["parents"] = ps // 上流：この意図がどのノードから派生したか（複数の事実がともに1つの意図を生むことがある）
 		}
 		if ys := yieldsOf[n.ID]; len(ys) > 0 {
-			m["yields"] = ys // 下游：本意图产生了哪些事实/发现
+			m["yields"] = ys // 下流：この意図がどの事実/発見を生んだか
 		}
 		out = append(out, m)
 	}
@@ -94,14 +94,14 @@ type ToolSet struct {
 	// can't, because the planner's terminal gate swallows wakes. Wired ONLY for the
 	// main agent (human steering); nil for the goals decomposer and workers.
 	resumeTask func()
-	// notifyGoal, if set, wakes the planner AND records ONE "人新增了 N 个目标：…" trigger
+	// notifyGoal, if set, wakes the planner AND records ONE "人が目標を N 件追加した：…" trigger
 	// for a whole set_goals call (batch-aware — one call, one trigger, not one per goal)
 	// so the next round spells out the added goals (instead of the planner having to
 	// spot new open goals in the overview). Wired ONLY for the main agent; nil for the
 	// goals decomposer (round-0 has no running planner to inform) and workers → those
 	// fall back to the bare notify.
 	notifyGoal func(texts []string)
-	// notifyHint, if set, wakes the planner AND records ONE "人新增了 N 条战略提示：…"
+	// notifyHint, if set, wakes the planner AND records ONE "人が戦略上のヒントを N 件追加した：…"
 	// trigger for a whole add_hint call (batch-aware — one call, one trigger) so the next
 	// round is told the round was fired by a new hint and spells the hint out, instead of
 	// the planner having to spot it folded into the graph overview. Wired for the main
@@ -150,9 +150,9 @@ type WriteCounts struct {
 // "explored but persisted nothing" signal (Total == 0).
 func (w WriteCounts) Total() int { return w.Facts + w.Assets + w.Findings }
 
-// String renders the per-kind breakdown for logs, e.g. "事实1 资产25 漏洞0".
+// String renders the per-kind breakdown for logs, e.g. "事実1 資産25 脆弱性0".
 func (w WriteCounts) String() string {
-	return fmt.Sprintf("事实%d 资产%d 漏洞%d", w.Facts, w.Assets, w.Findings)
+	return fmt.Sprintf("事実%d 資産%d 脆弱性%d", w.Facts, w.Assets, w.Findings)
 }
 
 // Writes reports what this run wrote back, split by node kind (so the engine can
@@ -184,7 +184,7 @@ func (t *ToolSet) CoverageDisabled() bool { return t.coverageDisabled }
 // they neither pollute the prompt nor let the model build a disabled denominator.
 // add_task_scope is deliberately NOT here: task_scope is the task's range boundary
 // (the filter basis for asset queries), not merely a coverage denominator, so the
-// agents that own范围定义 keep it either way — in lockstep with insertAssets'
+// agents that own範囲の定義 keep it either way — in lockstep with insertAssets'
 // auto-scope hook, which also runs regardless of the switch.
 var coverageOnlyTools = map[string]bool{"list_untested_assets": true}
 
@@ -303,7 +303,7 @@ func writeTool(name, desc string, schema map[string]any, run func(context.Contex
 // task-bound ExplorationStore. Two ToolSets carry a nil store: the catalog's
 // seed-only shell (never called) and the server-level one behind buildDomainReg,
 // which the tools table can bind to ANY agent — including ones that never run
-// inside a task (auto/pentest/reporter/自定义 agent/旁路提问). Refusing there
+// inside a task (auto/pentest/reporter/カスタム agent/脇道の質問). Refusing there
 // keeps a mis-bound tool a bad tool call; without the guard it was a nil deref,
 // and tool handlers run on the harness's own goroutine, so the panic is out of
 // reach of every recover() in the server and kills the whole process.
@@ -322,7 +322,7 @@ func (t *ToolSet) writeExpTool(name, desc string, schema map[string]any, run fun
 func (t *ToolSet) needExploration(name string, run func(context.Context, json.RawMessage) (actool.Result, error)) func(context.Context, json.RawMessage) (actool.Result, error) {
 	return func(ctx context.Context, in json.RawMessage) (actool.Result, error) {
 		if t.ts == nil {
-			return actool.Errorf(name + " 需要任务上下文（探索图）：当前 agent 不在某个任务内运行，取不到任务的探索图，该工具不可用。请在任务内使用它，或改用带 task_id 的跨任务读取工具（get_task_node_detail / list_task_findings / get_task_graph 等）。"), nil
+			return actool.Errorf(name + " にはタスクのコンテキスト（探索グラフ）が必要：現在の agent はどのタスクの中でも動いておらず、タスクの探索グラフを取得できないので、このツールは使えない。タスクの中で使うか、task_id 付きのタスクをまたぐ読み取りツール（get_task_node_detail / list_task_findings / get_task_graph など）を使うこと。"), nil
 		}
 		return run(ctx, in)
 	}
@@ -340,7 +340,7 @@ func jsonResult(v any) (actool.Result, error) {
 
 func (t *ToolSet) graphOverview() actool.CoreTool {
 	return t.readExpTool("graph_overview",
-		"(探索链路图)探索态势蒸馏摘要：资产计数、无接口的站点、frontier、发现、hints(人类/主 agent 的战略提示，生成意图时须纳入)。规划时先调它。",
+		"(探索の経路グラフ)探索状況を蒸留した要約：資産の数、インターフェースのないサイト、frontier、発見、hints(人間/メイン agent の戦略上のヒント。意図を生成するときに必ず取り込む)。計画するときはまずこれを呼ぶ。",
 		obj(map[string]any{}),
 		func(context.Context, json.RawMessage) (actool.Result, error) {
 			return jsonResult(t.graphOverviewData())
@@ -362,8 +362,8 @@ func (t *ToolSet) graphOverviewData() map[string]any {
 		gsum = append(gsum, map[string]any{"id": g.ID, "state": g.State, "text": p["text"]})
 	}
 	out["goals"] = gsum
-	// hints: 人类/主 agent 通过 add_hint 挂上图的战略提示；folded in so the
-	// planner reads them every round when generating intents (否则只写不读).
+	// hints: 人間/メイン agent が add_hint でグラフに付けた戦略上のヒント；folded in so the
+	// planner reads them every round when generating intents (さもないと書くだけで読まれない).
 	hints, _ := t.ts.ListByKind(db.KindHint, 50)
 	hsum := make([]map[string]any, 0, len(hints))
 	for _, h := range hints {
@@ -409,7 +409,7 @@ func (t *ToolSet) graphOverviewData() map[string]any {
 	}
 	hidden := func(id int64) bool { _, c := covered[id]; return c && !hotAtRender[id] }
 	const openIntentsCap = 30
-	fr, _ := t.ts.Frontier(openIntentsCap) // priority DESC, id ASC —— 优先级最高的前 N 条；真实总数见 frontier_open
+	fr, _ := t.ts.Frontier(openIntentsCap) // priority DESC, id ASC —— 優先度が最も高い先頭 N 件。本当の総数は frontier_open を参照
 	out["open_intents"] = compactIntents(fr, parentsOf, yieldsOf)
 	all, _ := t.ts.ListByKind(db.KindIntent, 300)
 	var running, recentDone []*db.Node
@@ -421,17 +421,17 @@ func (t *ToolSet) graphOverviewData() map[string]any {
 			if hidden(n.ID) {
 				continue // in a cold_digest and still cold — shown via cold_digests (§6.2)
 			}
-			recentDone = append(recentDone, n) // 最新在前（all 按 id 降序）；折叠的已剔除，输出时截最新 N
+			recentDone = append(recentDone, n) // 新しい順（all は id の降順）。たたんだものは除いてあり、出力時に最新の N 件に切る
 		}
 	}
 	out["running_intents"] = compactIntents(running, parentsOf, yieldsOf)
-	// done_intents_total：已结束意图（done/blocked/exhausted）总数，与 recent_done_intents
-	// 平行命名——后者只是它的最新窗口截断视图。两键并排即自描述："看到的是 N/总数"，
-	// 让 planner 去重时别把"没显示"当成"没派过"，无需在提示词里另行解释。
+	// done_intents_total：終わった意図（done/blocked/exhausted）の総数。recent_done_intents と
+	// 対になる名前——後者はその最新の窓だけを切り出した見え方にすぎない。2つのキーを並べればそれ自体で説明になる：「見えているのは N/総数」。
+	// planner が重複を排除するとき「表示されていない」を「出していない」と取り違えないようにし、プロンプトで別に説明する必要をなくす。
 	if dt, err := t.ts.CountFinishedIntents(); err == nil {
 		out["done_intents_total"] = dt
 	}
-	// frontier_open：开放意图真实总数（open_intents 只是其中优先级最高的前 N 条截断视图）。
+	// frontier_open：開いている意図の本当の総数（open_intents はそのうち優先度が最も高い先頭 N 件を切り出した見え方にすぎない）。
 	if fo, err := t.ts.CountOpenIntents(); err == nil {
 		out["frontier_open"] = fo
 	} else {
@@ -443,12 +443,12 @@ func (t *ToolSet) graphOverviewData() map[string]any {
 	// via node_detail(id).
 	vulnNodes, _ := t.ts.ListByKind(db.KindFinding, 1000)
 	factNodes, _ := t.ts.ListByKind(db.KindFact, 1000) // newest first
-	out["findings_total"] = len(vulnNodes)             // 确认漏洞总数（目标判定看它）；明细见 finding_list（最新一窗）
-	out["facts"] = len(factNodes)                      // 探索事实/结论数（含否定结论）
-	// findings 是任务里最高价值的产物 → 概览带最新一窗（≤10 条，vulnNodes 已按 id 降序即最新在前），
-	// 让 planner 每轮判目标时一眼看到最近确认的漏洞；全量/更早的用 list_findings 取。
-	// 每条只留 {id, summary, from_intent?}：from_intent 是产生本漏洞的意图。
-	// evidence/assets/vulnclass/severity/state 等仍可用 list_findings / node_detail(id) 取。
+	out["findings_total"] = len(vulnNodes)             // 確認済みの脆弱性の総数（目標の判定はこれを見る）。明細は finding_list（最新の窓）を参照
+	out["facts"] = len(factNodes)                      // 探索の事実/結論の数（否定の結論を含む）
+	// findings はタスクで最も価値の高い成果物 → 概要に最新の窓を付ける（≤10 件。vulnNodes はすでに id の降順で新しい順）。
+	// planner がラウンドごとに目標を判定するとき、最近確認された脆弱性がひと目でわかるようにする。全件/それより古いものは list_findings で取得する。
+	// 各項目には {id, summary, from_intent?} だけを残す：from_intent はこの脆弱性を生んだ意図。
+	// evidence/assets/vulnclass/severity/state などは引き続き list_findings / node_detail(id) で取得できる。
 	const findingListCap = 10
 	findingList := make([]map[string]any, 0, findingListCap)
 	for _, n := range vulnNodes {
@@ -459,14 +459,14 @@ func (t *ToolSet) graphOverviewData() map[string]any {
 		_ = json.Unmarshal(n.Payload, &fp)
 		m := map[string]any{"id": n.ID, "summary": fp["summary"]}
 		if from := factFrom[n.ID]; from > 0 {
-			m["from_intent"] = from // 本漏洞由哪个意图产生
+			m["from_intent"] = from // この脆弱性がどの意図から生まれたか
 		}
 		findingList = append(findingList, m)
 	}
 	out["finding_list"] = findingList
-	// recent_facts：非折叠事实里最新的一窗（≤N，factNodes 按 id 降序即最新在前）。已折进
-	// digest 且仍冷的（hidden）走 cold_digests，不在此重复。每条 {id, summary, from_intent?,
-	// confidence?}；evidence 等详情用 node_detail(id)。更早的用 list_facts 翻。
+	// recent_facts：たたんでいない事実のうち最新の窓（≤N。factNodes は id の降順で新しい順）。すでに
+	// digest にたたまれてまだコールドなもの（hidden）は cold_digests に回し、ここでは重ねない。各項目は {id, summary, from_intent?,
+	// confidence?}。evidence などの詳細は node_detail(id) で取得する。それより古いものは list_facts でめくる。
 	const recentFactsCap = 20
 	recentFacts := make([]map[string]any, 0, recentFactsCap)
 	for _, n := range factNodes {
@@ -474,14 +474,14 @@ func (t *ToolSet) graphOverviewData() map[string]any {
 			break
 		}
 		if hidden(n.ID) {
-			continue // 已折进 digest 且仍冷 —— 见 cold_digests
+			continue // すでに digest にたたまれてまだコールド —— cold_digests を参照
 		}
 		m := compactNode(n)
 		if from := factFrom[n.ID]; from > 0 {
-			m["from_intent"] = from // 本事实由哪个意图产生
+			m["from_intent"] = from // この事実がどの意図から生まれたか
 		}
-		// confidence 带进概览：让规划者一眼看出哪条结论只是 inferred（尤其否定结论
-		// 别当铁案）；evidence 较长，留给 node_detail(id)。
+		// confidence を概要に含める：どの結論が inferred にすぎないかを計画者がひと目でわかるようにする（特に否定の結論を
+		// 確定事項として扱わないように）。evidence は長めなので node_detail(id) に任せる。
 		var fp map[string]any
 		if json.Unmarshal(n.Payload, &fp) == nil {
 			if c, ok := fp["confidence"].(string); ok && c != "" {
@@ -491,20 +491,20 @@ func (t *ToolSet) graphOverviewData() map[string]any {
 		recentFacts = append(recentFacts, m)
 	}
 	out["recent_facts"] = recentFacts
-	// recent_done_intents：非折叠的已结束意图里最新的一窗（≤N，recentDone 已按 id 降序）。
-	// 更早的看 done_intents_total 计数 + node_detail(id)。
+	// recent_done_intents：たたんでいない終わった意図のうち最新の窓（≤N。recentDone はすでに id の降順）。
+	// それより古いものは done_intents_total の数 + node_detail(id) で見る。
 	const recentDoneCap = 12
 	if len(recentDone) > recentDoneCap {
 		recentDone = recentDone[:recentDoneCap]
 	}
 	out["recent_done_intents"] = compactIntents(recentDone, parentsOf, yieldsOf)
-	// cold-digest §6.1: 折叠冷区的 digest body，按最新成员时间降序取前 N；被截的更旧 digest
-	// 只给裸 id（仍可 expand_digest 展开），避免冷区唯一出口被无限拉长。
+	// cold-digest §6.1: たたんだコールド領域の digest の body を、最新のメンバーの時刻の降順で先頭 N 件取る。切り捨てたより古い digest は
+	// 素の id だけを渡し（引き続き expand_digest で展開できる）、コールド領域の唯一の出口が際限なく長くなるのを避ける。
 	const coldDigestsCap = 15
 	if cds, more := coldDigestsRecent(t.ts, coldDigestsCap); len(cds) > 0 {
-		out["cold_digests"] = cds // [{id, body, member_count}] —— 直接读 body (§6.1)
+		out["cold_digests"] = cds // [{id, body, member_count}] —— body をそのまま読む (§6.1)
 		if len(more) > 0 {
-			out["cold_digests_more"] = more // 被截断的更旧 digest 的 id；用 expand_digest(id) 展开
+			out["cold_digests_more"] = more // 切り捨てたより古い digest の id。expand_digest(id) で展開する
 		}
 	}
 	// the original task (root) so the planner always has it, not just the
@@ -516,11 +516,11 @@ func (t *ToolSet) graphOverviewData() map[string]any {
 	// summaries in a separate field so their intents never enter this task's
 	// frontier or get mistaken for locally claimable work.
 	out["related_tasks"] = t.relatedTaskOverviews()
-	// coverage：粗略的资产测试覆盖度参考——范围(task_scope)内的资产里，被 fact 碰过的
-	// 占比 + by_type(按类型的 总数/已测)。要看未测的具体资产由 agent 按需调 list_untested_assets 自行判断。仅任务上下文有。
-	// 资产覆盖度功能关闭时(coverageDisabled)：只保留 host_count(目标主机数的感知信息)，
-	// 丢弃 denominator/tested/pct/by_type/note 等覆盖度度量，避免污染上下文、也不诱导
-	// 已隐藏的 add_task_scope/list_untested_assets。
+	// coverage：大まかな資産のテストのカバレッジの参考——範囲(task_scope)内の資産のうち、fact が触れたものの
+	// 割合 + by_type(種類ごとの 総数/テスト済み)。テストしていない具体的な資産を見るには、agent が必要に応じて list_untested_assets を呼んで自分で判断する。タスクのコンテキストにだけある。
+	// 資産カバレッジの機能がオフ(coverageDisabled)のとき：host_count(対象ホストの数の感覚)だけを残し、
+	// denominator/tested/pct/by_type/note などのカバレッジの尺度は捨てる。コンテキストを汚さず、
+	// 隠してある add_task_scope/list_untested_assets に誘導もしないため。
 	if t.as != nil && t.ts != nil && t.taskID > 0 {
 		{
 			m := map[string]any{}
@@ -529,18 +529,18 @@ func (t *ToolSet) graphOverviewData() map[string]any {
 					m["denominator"] = cov.Denominator
 					m["tested"] = cov.Tested
 					m["by_type"] = cov.ByType
-					m["note"] = "coverage资产测试覆盖度（包括接口等各种相关资产），粗略估计、仅供参考：包含当前任务与直接关联任务的 scope、事实锚点；关联 scope 只读。容器型资产/大量枚举会让它偏低，勿据此认为已测完；可用 add_task_scope 增补本任务范围、list_untested_assets 看未测资产【通常不调用list_untested_assets，按照任务推进即可】；"
+					m["note"] = "coverage は資産のテストのカバレッジ（インターフェースなど関連するあらゆる資産を含む）で、大まかな見積もりであり参考にとどまる：現在のタスクと直接関連するタスクの scope、事実の錨を含む。関連する scope は読み取り専用。コンテナ型の資産/大量の列挙があると低めに出るので、これをもとにテストし終えたと考えないこと。add_task_scope でこのタスクの範囲を補い、list_untested_assets でテストしていない資産を見られる【通常は list_untested_assets を呼ばず、タスクに沿って進めればよい】。"
 					if cov.Denominator == 0 {
 						m["pct"] = nil
-						m["status"] = "范围未锚定"
+						m["status"] = "範囲が固定されていない"
 					} else {
 						m["pct"] = cov.Pct
 					}
 				}
 			}
 			if hosts, err := t.as.HostsByTaskWithSources(t.taskID); err == nil {
-				// 只给主机总数，不再把 host 列表平铺进 graph_overview（大范围任务里那是每轮
-				// 都重复携带的大量字符串，对规划决策价值有限）；具体主机按需 list_assets 查。
+				// ホストの総数だけを渡し、ホストの一覧を graph_overview に並べることはもうしない（範囲の大きいタスクでは、それはラウンドごとに
+				// 繰り返し運ばれる大量の文字列で、計画の判断にとっての価値は限られる）。具体的なホストは必要に応じて list_assets で調べる。
 				m["host_count"] = len(hosts)
 			}
 			if len(m) > 0 {
@@ -811,7 +811,7 @@ func (t *ToolSet) relatedTaskOverviews() []map[string]any {
 			}
 			item["cold_digests"] = cds
 			if len(more) > 0 {
-				item["cold_digests_more"] = more // 被截断的更旧 digest 的 id；expand_digest(id) 展开
+				item["cold_digests_more"] = more // 切り捨てたより古い digest の id。expand_digest(id) で展開する
 			}
 		}
 		if statsErr == nil {
@@ -899,14 +899,14 @@ func compactFinding(n *db.Node) map[string]any {
 }
 
 func (t *ToolSet) listFindings() actool.CoreTool {
-	return t.readExpTool("list_findings", "列本任务及直接关联任务的【确认漏洞】(紧凑：id+task_id+intent_id+vulnclass+severity+摘要+状态)。关联任务条目带 source_task_id/inherited=true 且只读。这里只含漏洞；普通探索事实用 list_facts，详情用 node_detail(id)。",
+	return t.readExpTool("list_findings", "このタスクと直接関連するタスクの【確認済みの脆弱性】を一覧にする(コンパクト：id+task_id+intent_id+vulnclass+severity+要約+状態)。関連するタスクの項目には source_task_id/inherited=true が付き、読み取り専用。ここには脆弱性だけを含む。通常の探索の事実は list_facts、詳細は node_detail(id) を使う。",
 		obj(map[string]any{}),
 		func(context.Context, json.RawMessage) (actool.Result, error) {
 			f, _ := t.ts.ListByKindWithSources(db.KindFinding, 500)
 			if err := t.ts.PopulateFindingTrafficIDs(f); err != nil {
 				return actool.Errorf(err.Error()), nil
 			}
-			intentOf, _ := t.ts.FindingIntentsWithSources() // finding id -> 产生它的 intent id
+			intentOf, _ := t.ts.FindingIntentsWithSources() // finding id -> それを生んだ intent id
 			taskID := t.taskID
 			if taskID <= 0 {
 				taskID, _ = t.ts.TaskID()
@@ -937,11 +937,11 @@ func (t *ToolSet) listFindings() actool.CoreTool {
 const factsPageSize = 20
 
 func (t *ToolSet) listFacts() actool.CoreTool {
-	return t.readExpTool("list_facts", "分页列本任务及直接关联任务的【探索事实/结论】，最新在前(紧凑：id+摘要+状态，摘要过长会截断，全文用 node_detail(id))。参数均可选：limit(默认 20，上限 100)、before(游标，传上一页返回的 next_before 取更旧的一页；省略/0=最新一页)、q(按摘要关键词过滤)。返回 {facts, total, has_more, next_before}：total 是过滤后的总数，has_more=true 时用 next_before 继续翻页。关联任务条目带 source_task_id/inherited=true 且只读。漏洞看 list_findings。",
+	return t.readExpTool("list_facts", "このタスクと直接関連するタスクの【探索の事実/結論】をページ分けして新しい順に一覧にする(コンパクト：id+要約+状態。要約が長すぎると切り詰める。全文は node_detail(id))。引数はどれも任意：limit(既定 20、上限 100)、before(カーソル。前のページが返した next_before を渡すと、より古いページを取得する。省略/0=最新のページ)、q(要約のキーワードで絞り込む)。戻り値は {facts, total, has_more, next_before}：total は絞り込み後の総数で、has_more=true なら next_before でページを送り続ける。関連するタスクの項目には source_task_id/inherited=true が付き、読み取り専用。脆弱性は list_findings で見る。",
 		obj(map[string]any{
-			"limit":  intp("返回条数，默认 20，上限 100"),
-			"before": intp("分页游标：只返回 id 小于该值的更旧事实；省略或 0 = 最新一页"),
-			"q":      str("按事实摘要关键词过滤（不区分大小写）；省略 = 不过滤"),
+			"limit":  intp("返す件数。既定 20、上限 100"),
+			"before": intp("ページ分けのカーソル：id がこの値より小さい、より古い事実だけを返す。省略または 0 = 最新のページ"),
+			"q":      str("事実の要約のキーワードで絞り込む（大文字小文字を区別しない）。省略 = 絞り込まない"),
 		}),
 		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
 			var a struct {
@@ -967,7 +967,7 @@ func (t *ToolSet) listFacts() actool.CoreTool {
 			}
 			res := map[string]any{"facts": out, "total": total, "has_more": hasMore}
 			if hasMore && len(f) > 0 {
-				res["next_before"] = f[len(f)-1].ID // 传回它取下一页(更旧的)
+				res["next_before"] = f[len(f)-1].ID // これを返せば次のページ(より古いもの)を取得できる
 			}
 			return jsonResult(res)
 		})
@@ -990,8 +990,8 @@ func compactFact(n *db.Node) map[string]any {
 }
 
 func (t *ToolSet) nodeDetail() actool.CoreTool {
-	return t.readExpTool("node_detail", "按 id 取本任务或直接关联任务的【探索图节点】完整内容。继承节点带 source_task_id/inherited=true 且只读。仅限 list_facts/list_findings/graph_overview 返回的探索节点 id；资产请用 list_assets/asset_neighbors。",
-		obj(map[string]any{"id": idp("探索图节点 id(非资产 id)")}, "id"),
+	return t.readExpTool("node_detail", "このタスクまたは直接関連するタスクの【探索グラフのノード】の完全な内容を id で取得する。引き継いだノードには source_task_id/inherited=true が付き、読み取り専用。list_facts/list_findings/graph_overview が返した探索ノードの id に限る。資産には list_assets/asset_neighbors を使うこと。",
+		obj(map[string]any{"id": idp("探索グラフのノードの id(資産の id ではない)")}, "id"),
 		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
 			var a struct {
 				ID json.RawMessage `json:"id"`
@@ -999,14 +999,14 @@ func (t *ToolSet) nodeDetail() actool.CoreTool {
 			_ = json.Unmarshal(in, &a)
 			id := pid(a.ID)
 			if id <= 0 {
-				return actool.Errorf("id 必填"), nil
+				return actool.Errorf("id は必須"), nil
 			}
 			n, err := t.ts.GetNodeWithSources(id)
 			if err != nil {
 				return actool.Errorf(err.Error()), nil
 			}
 			if n == nil {
-				return actool.Errorf(fmt.Sprintf("未找到探索节点 %d。若你想查的是资产，请用 list_assets / asset_neighbors（资产与探索节点是不同的 id 空间，资产 id 不能传给 node_detail）。", id)), nil
+				return actool.Errorf(fmt.Sprintf("探索ノード %d が見つからない。調べたいのが資産なら list_assets / asset_neighbors を使うこと（資産と探索ノードは別の id 空間で、資産の id は node_detail に渡せない）。", id)), nil
 			}
 			if err := t.ts.PopulateFindingTrafficIDs([]*db.Node{n}); err != nil {
 				return actool.Errorf(err.Error()), nil
@@ -1017,7 +1017,7 @@ func (t *ToolSet) nodeDetail() actool.CoreTool {
 
 // --- planner write tools ---
 
-// intentItem 是 add_intent 批量/单条的一条探索方向。
+// intentItem は add_intent の一括/単発の1本の探索の方向。
 type intentItem struct {
 	Summary   string            `json:"summary"`
 	AssetIDs  []json.RawMessage `json:"asset_ids"`
@@ -1025,23 +1025,23 @@ type intentItem struct {
 	Priority  int               `json:"priority"`
 }
 
-// addOneIntent 创建一条意图节点并连上游血缘，返回 id。
-// 约束：意图只能锚在已确认知识上——每个 parent_id 必须是已存在的 fact/finding
-// 节点（不能挂在别的意图/目标/提示上）。顶层全新方向留空 parent_ids，兜底连 origin fact。
-// 这样"每个意图都连到 fact 节点、且是发现驱动而非凭空规划"从创建路径上被强制。
+// addOneIntent は意図のノードを1つ作って上流の系譜につなぎ、id を返す。
+// 制約：意図は確認済みの知識にしか錨を下ろせない——各 parent_id は既存の fact/finding
+// ノードでなければならない（別の意図/目標/ヒントには付けられない）。最上位の新しい方向は parent_ids を空にし、最後の受け皿として origin fact につなぐ。
+// これで「どの意図も fact ノードにつながり、何もないところからの計画でなく発見に駆動される」ことを作成の経路で強制する。
 func (t *ToolSet) addOneIntent(it intentItem) (int64, error) {
 	if strings.TrimSpace(it.Summary) == "" {
-		return 0, fmt.Errorf("summary 不能为空")
+		return 0, fmt.Errorf("summary は空にできない")
 	}
-	// 先校验锚点（建节点前，避免坏锚点留下孤儿意图）。
+	// まず錨を検証する（ノードを作る前に。不正な錨で孤児の意図が残るのを避ける）。
 	parents := pidList(it.ParentIDs)
 	for _, pidv := range parents {
 		n, err := t.ts.GetNodeWithSources(pidv)
 		if err != nil || n == nil {
-			return 0, fmt.Errorf("parent_id %d 不存在于本任务或直接关联任务：parent_ids 必须是已存在的【事实(fact)/发现(finding)】节点 id；顶层全新方向请留空 parent_ids", pidv)
+			return 0, fmt.Errorf("parent_id %d はこのタスクにも直接関連するタスクにも存在しない：parent_ids は既存の【事実(fact)/発見(finding)】ノードの id でなければならない。最上位の新しい方向なら parent_ids を空にすること", pidv)
 		}
 		if n.Kind != db.KindFact && n.Kind != db.KindFinding {
-			return 0, fmt.Errorf("parent_id %d 是 %q 节点，不能作为意图锚点：意图只能锚在已确认的【事实(fact)/发现(finding)】上，不能挂在意图/目标/提示上；顶层全新方向请留空 parent_ids", pidv, n.Kind)
+			return 0, fmt.Errorf("parent_id %d は %q ノードなので、意図の錨にできない：意図は確認済みの【事実(fact)/発見(finding)】にしか錨を下ろせず、意図/目標/ヒントには付けられない。最上位の新しい方向なら parent_ids を空にすること", pidv, n.Kind)
 		}
 	}
 	priority := it.Priority
@@ -1049,15 +1049,15 @@ func (t *ToolSet) addOneIntent(it intentItem) (int64, error) {
 		priority = 5
 	}
 	anchors := pidList(it.AssetIDs)
-	// 资产拦截：意图绑定的资产若命中系统资产拦截规则，则禁止下发该意图。
+	// 資産の遮断：意図に結びつけた資産がシステムの資産遮断ルールに一致したら、その意図を出すことを禁じる。
 	if t.as != nil && len(anchors) > 0 {
 		hits, err := t.as.CheckAssetsIntercept(t.taskID, anchors)
 		if err != nil {
-			return 0, fmt.Errorf("资产拦截校验失败：%w", err)
+			return 0, fmt.Errorf("資産の遮断の検証に失敗：%w", err)
 		}
 		if len(hits) > 0 {
 			var b strings.Builder
-			fmt.Fprintf(&b, "意图「%s」绑定的资产未通过测试范围校验，请停止对相关资产进行测试：", it.Summary)
+			fmt.Fprintf(&b, "意図「%s」に結びつけた資産がテスト範囲の検証を通らなかったので、関係する資産へのテストを止めること：", it.Summary)
 			for _, h := range hits {
 				fmt.Fprintf(&b, "\n - %s", h.Describe())
 			}
@@ -1089,19 +1089,19 @@ func (t *ToolSet) addOneIntent(it intentItem) (int64, error) {
 }
 
 func (t *ToolSet) addIntent() actool.CoreTool {
-	return t.writeExpTool("add_intent", "生成【探索方向】写入 frontier，并连入探索链路。意图是开放的探索方向，不是固定类型——用 summary 一句话自由描述要探索/验证/利用什么。\n"+
-		"★优先批量：一轮筛出的多个新方向放进 intents 数组一次提交（比逐条调用省往返）。返回 ids 数组，与 intents 等长同序（失败项 id=0，详情见 errors）。单条则省略 intents 直接给顶层 summary。",
+	return t.writeExpTool("add_intent", "【探索の方向】を生成して frontier に書き込み、探索の経路につなぐ。意図は開かれた探索の方向であって固定の種類ではない——summary で何を探索/検証/悪用するかを1文で自由に述べる。\n"+
+		"★まとめて出すことを優先：1ラウンドで選んだ複数の新しい方向は intents 配列に入れて一度に提出する（1件ずつ呼ぶより往復が少ない）。ids 配列を返し、intents と同じ長さ・同じ順序になる（失敗した項目の id=0。詳細は errors を参照）。単発なら intents を省いて最上位の summary を直接渡す。",
 		obj(map[string]any{
-			"intents":    map[string]any{"type": "array", "description": "【优先用这个】要新增的探索方向数组，按顺序处理。每个元素字段同下方顶层字段（summary/asset_ids/parent_ids/priority）。返回 ids 与本数组等长、同序。", "items": map[string]any{"type": "object"}},
-			"summary":    str("[单条] 一句话描述这个探索方向：做什么+为什么。已写清方向即可，不依赖资产 id。"),
-			"asset_ids":  map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "本方向要测试/攻击的【目标资产 id】（**尽量传**，0/1/多个；是 list_assets 返回的资产 id，不是探索节点 id）：这条探索方向针对哪些资产（站点/接口/参数/主机等）。只要方向围绕某些具体资产就务必传上——它是「这条探索打哪些目标」的结构化标记，用于覆盖去重、把意图连入资产链路。仅当纯全局侦察、确实没有具体目标资产时才留空。"},
-			"parent_ids": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "上游锚点 id（可选，0/1/多个）：本方向由哪些【已确认的事实(fact)/发现(finding)】综合得出。**只能填已存在的 fact/finding 节点 id,不能填意图/目标/提示**——意图必须锚在已确认知识上,发现驱动而非凭空规划。多个事实共同产生一个新意图就传多个;顶层全新侦察方向请留空（会自动挂到任务起点 origin fact）。"},
-			"priority":   intp("优先级 0-10，默认5"),
+			"intents":    map[string]any{"type": "array", "description": "【こちらを優先して使う】追加する探索の方向の配列で、順に処理する。各要素のフィールドは下の最上位のフィールド（summary/asset_ids/parent_ids/priority）と同じ。返す ids はこの配列と同じ長さ・同じ順序。", "items": map[string]any{"type": "object"}},
+			"summary":    str("[単発] この探索の方向を1文で述べる：何をするか+なぜか。方向がはっきり書けていればよく、資産の id には依存しない。"),
+			"asset_ids":  map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "この方向でテスト/攻撃する【対象の資産の id】（**できるだけ渡す**。0/1/複数。list_assets が返す資産の id で、探索ノードの id ではない）：この探索の方向がどの資産（サイト/インターフェース/引数/ホストなど）を対象にするか。方向がいずれかの具体的な資産を中心にしているなら必ず渡す——それは「この探索がどの対象を攻めるか」の構造化された印で、カバレッジの重複排除と、意図を資産の経路につなぐのに使う。純粋に全体的な偵察で、具体的な対象の資産が本当にないときだけ空にする。"},
+			"parent_ids": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "上流の錨の id（任意。0/1/複数）：この方向がどの【確認済みの事実(fact)/発見(finding)】を組み合わせて得られたか。**既存の fact/finding ノードの id しか入れられず、意図/目標/ヒントは入れられない**——意図は確認済みの知識に錨を下ろさなければならず、何もないところからの計画でなく発見に駆動される。複数の事実がともに新しい意図を生んだなら複数渡す。最上位の新しい偵察の方向なら空にする（タスクの起点 origin fact に自動で付く）。"},
+			"priority":   intp("優先度 0-10。既定は 5"),
 		}),
 		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
 			var a struct {
 				Intents    []intentItem `json:"intents"`
-				intentItem              // 单条模式：顶层 summary/asset_ids/parent_ids/priority
+				intentItem              // 単発モード：最上位の summary/asset_ids/parent_ids/priority
 			}
 			_ = json.Unmarshal(in, &a)
 			batch := len(a.Intents) > 0
@@ -1123,15 +1123,15 @@ func (t *ToolSet) addIntent() actool.CoreTool {
 				createdAny = true
 			}
 
-			// 人经主 agent 直投意图 → 若任务已 done（无 open 目标的 goalless 分支），把它
-			// 拉回 running，worker 才能领这条意图执行。resumeTask 仅由主 agent 的 Chat 接入
-			// (SetResumeTask)；planner 的 ToolSet 为 nil，故 planner 自己调 add_intent 时此段
-			// no-op，不影响其正常产意图。意图节点已在上面建好(open)，复活时不会被误判抽干。
+			// 人がメイン agent を通じて意図を直接投げた → タスクがすでに done（open の目標がない goalless の分岐）なら、
+			// running に戻して worker がこの意図を受け取って実行できるようにする。resumeTask はメイン agent の Chat からだけつながる
+			// (SetResumeTask)。planner の ToolSet は nil なので、planner 自身が add_intent を呼んだときこの部分は
+			// no-op で、通常の意図の生成には影響しない。意図のノードは上ですでに作ってある(open)ので、復活時に空と誤判定されることはない。
 			if createdAny && t.resumeTask != nil {
 				t.resumeTask()
 			}
 
-			if !batch { // 单条：保持原返回
+			if !batch { // 単発：元の戻り値を保つ
 				if e, bad := errs["0"]; bad {
 					return actool.Errorf(e), nil
 				}
@@ -1146,7 +1146,7 @@ func (t *ToolSet) addIntent() actool.CoreTool {
 }
 
 func (t *ToolSet) listGoals() actool.CoreTool {
-	return t.readExpTool("list_goals", "列出本任务的目标节点及其状态（open/met），用于判断是否达成。",
+	return t.readExpTool("list_goals", "このタスクの目標のノードとその状態（open/met）を一覧にし、達成したかの判断に使う。",
 		obj(map[string]any{}),
 		func(context.Context, json.RawMessage) (actool.Result, error) {
 			g, _ := t.ts.ListByKind(db.KindGoal, 100)
@@ -1155,11 +1155,11 @@ func (t *ToolSet) listGoals() actool.CoreTool {
 }
 
 func (t *ToolSet) proveGoal() actool.CoreTool {
-	return t.writeExpTool("prove_goal", "当你判断某个发现/事实证明了某个目标达成时调用：把证据节点连到目标节点，并标记目标 met。",
+	return t.writeExpTool("prove_goal", "ある発見/事実がある目標の達成を証明したと判断したときに呼ぶ：証拠のノードを目標のノードにつなぎ、目標を met にする。",
 		obj(map[string]any{
-			"goal_id":     idp("目标节点 id"),
-			"evidence_id": idp("证明它的发现/事实节点 id"),
-			"reason":      str("为什么这个证据满足该目标"),
+			"goal_id":     idp("目標のノードの id"),
+			"evidence_id": idp("それを証明する発見/事実のノードの id"),
+			"reason":      str("なぜこの証拠がその目標を満たすのか"),
 		}, "goal_id", "evidence_id"),
 		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
 			var a struct {
@@ -1170,20 +1170,20 @@ func (t *ToolSet) proveGoal() actool.CoreTool {
 			_ = json.Unmarshal(in, &a)
 			goal, ev := pid(a.GoalID), pid(a.EvidenceID)
 			if goal == 0 || ev == 0 {
-				return actool.Errorf("goal_id 和 evidence_id 必填"), nil
+				return actool.Errorf("goal_id と evidence_id は必須"), nil
 			}
 			goalNode, err := t.ts.GetNode(goal)
 			if err != nil || goalNode == nil || goalNode.Kind != db.KindGoal {
-				return actool.Errorf("goal_id 必须是本任务的目标节点（关联任务目标只读）"), nil
+				return actool.Errorf("goal_id はこのタスクの目標のノードでなければならない（関連するタスクの目標は読み取り専用）"), nil
 			}
 			evidenceNode, err := t.ts.GetNodeWithSources(ev)
 			if err != nil || evidenceNode == nil || (evidenceNode.Kind != db.KindFact && evidenceNode.Kind != db.KindFinding) {
-				return actool.Errorf("evidence_id 必须是本任务或直接关联任务的事实/漏洞节点"), nil
+				return actool.Errorf("evidence_id はこのタスクまたは直接関連するタスクの事実/脆弱性のノードでなければならない"), nil
 			}
 			_ = t.ts.Link(ev, db.RelProves, goal)
 			_ = t.ts.SetNodeState(goal, "met")
-			// 每标记一个目标 met，就检查本任务是否【所有目标】都已 met；若是，自动判定
-			// 任务完成（置 GoalMet），无需再依赖模型显式调 goal_met。
+			// 目標を1つ met にするたびに、このタスクの【すべての目標】が met になったかを確かめる。そうなら自動で
+			// タスクを完了と判定し（GoalMet にする）、モデルが明示的に goal_met を呼ぶことにはもう頼らない。
 			if goals, err := t.ts.ListByKind(db.KindGoal, 1000); err == nil && len(goals) > 0 {
 				allMet := true
 				for _, g := range goals {
@@ -1194,8 +1194,8 @@ func (t *ToolSet) proveGoal() actool.CoreTool {
 				}
 				if allMet {
 					t.GoalMet = true
-					t.Reason = fmt.Sprintf("所有 %d 个目标均已 met（最后由 goal %d 触发）", len(goals), goal)
-					return actool.Text(fmt.Sprintf("goal %d marked met；本任务所有目标均已达成，任务自动判定完成", goal)), nil
+					t.Reason = fmt.Sprintf("%d 件の目標がすべて met（最後は goal %d で起動）", len(goals), goal)
+					return actool.Text(fmt.Sprintf("goal %d marked met。このタスクのすべての目標が達成されたので、タスクを自動で完了と判定した", goal)), nil
 				}
 			}
 			return actool.Text(fmt.Sprintf("goal %d marked met", goal)), nil
@@ -1203,8 +1203,8 @@ func (t *ToolSet) proveGoal() actool.CoreTool {
 }
 
 func (t *ToolSet) goalMet() actool.CoreTool {
-	return writeTool("goal_met", "【立即结束整个任务】——仅当你确认任务的【全部目标都已真正达成、整体收官】时才调（注意是任务【整体】完成；仅仅达成了其中某一个目标/某一个 flag/某一个漏洞【不算】——那种情况用 prove_goal 标记该目标即可）。⚠️它不是用来“结束本轮规划”的：本轮没有新意图要派、或在等 worker 产出，都【直接结束本轮即可，不要调本工具】（0 个意图是完全正常的）。正常判定优先用 prove_goal 逐个证明目标；goal_met 只是绕过逐个证明、直接从全局收官的手段。",
-		obj(map[string]any{"reason": str("达成理由（必须是目标真正达成的证据，不能是“本轮无新方向”这类结束本轮的理由）")}, "reason"),
+	return writeTool("goal_met", "【ただちにタスク全体を終える】——タスクの【すべての目標が本当に達成され、全体として締めくくった】と確認したときにだけ呼ぶ（タスクの【全体】の完了であることに注意。目標のうちの1つ/flag の1つ/脆弱性の1つを達成しただけでは【数えない】——その場合は prove_goal でその目標に印を付ければよい）。⚠️これは「このラウンドの計画を終える」ためのものではない：このラウンドで出す新しい意図がない、または worker の産出を待っているときは、どちらも【そのままこのラウンドを終えればよく、このツールを呼んではならない】（意図 0 個はまったく正常）。通常の判定では prove_goal で目標を1つずつ証明することを優先する。goal_met は1つずつの証明を飛ばし、全体から直接締めくくる手段にすぎない。",
+		obj(map[string]any{"reason": str("達成の理由（目標が本当に達成された証拠でなければならず、「このラウンドに新しい方向がない」のようなラウンドを終える理由であってはならない）")}, "reason"),
 		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
 			var a struct{ Reason string }
 			_ = json.Unmarshal(in, &a)
@@ -1217,13 +1217,13 @@ func (t *ToolSet) goalMet() actool.CoreTool {
 // --- worker write tools ---
 
 func (t *ToolSet) addFinding() actool.CoreTool {
-	return writeTool("report_finding", "记录确认的漏洞，用 evidence 提供命令输出、日志等可验证证据。任务上下文传当前 intent_id。返回的 finding_id 是独立漏洞记录 ID，finding_node_id 是探索节点 ID（第一行保留该节点编号）。", obj(map[string]any{
-		"vulnclass": str("漏洞类别"), "name": str("漏洞名称"), "severity": str("critical|high|medium|low"), "summary": str("发现摘要"),
-		"intent_id": idp("当前任务的意图 id"), "asset_ids": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "受影响资产 id"},
-		"evidence":         str("证据/PoC 文本"),
-		"evidence_hint_id": idp("可选：本任务中对应此漏洞的提示节点 ID，自动携带其结构化 traffic_refs；不能引用继承提示或其他漏洞的提示"),
-		"traffic_refs": map[string]any{"type": "array", "description": "可选；HTTP/HTTPS 漏洞先检索并逐条核实请求/响应确实支持漏洞结论，再按复现顺序填写真实 ID。TCP 等非 HTTP 漏洞、未采集或找不到确切记录时省略或传 []，不阻止上报；可在 evidence 说明原因并提供其他可验证证据。不要猜测 ID、按域名/时间推定关联或仅为补包重复探测。用途 baseline 正常对照 / proof 漏洞证明 / verification 补充验证 / supporting 辅助证据。",
-			"items": obj(map[string]any{"traffic_id": str("traffic_search 返回的真实流量 ID"), "role": map[string]any{"type": "string", "enum": []string{"baseline", "proof", "verification", "supporting"}}, "note": str("该流量如何支持漏洞结论")}, "traffic_id")},
+	return writeTool("report_finding", "確認した脆弱性を記録し、evidence でコマンドの出力やログなどの確かめられる証拠を示す。タスクのコンテキストでは現在の intent_id を渡す。返される finding_id は独立した脆弱性の記録 ID、finding_node_id は探索ノードの ID（1行目にそのノードの番号を残す）。", obj(map[string]any{
+		"vulnclass": str("脆弱性の種類"), "name": str("脆弱性の名前"), "severity": str("critical|high|medium|low"), "summary": str("発見の要約"),
+		"intent_id": idp("現在のタスクの意図の id"), "asset_ids": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "影響を受ける資産の id"},
+		"evidence":         str("証拠/PoC の文"),
+		"evidence_hint_id": idp("任意：このタスクでこの脆弱性に対応するヒントのノード ID。その構造化された traffic_refs を自動で引き継ぐ。引き継いだヒントや他の脆弱性のヒントは参照できない"),
+		"traffic_refs": map[string]any{"type": "array", "description": "任意。HTTP/HTTPS の脆弱性は、まず検索してリクエスト/レスポンスが本当に脆弱性の結論を裏づけることを1件ずつ確かめてから、再現の順に本物の ID を入れる。TCP など HTTP 以外の脆弱性、取得していない、または正確な記録が見つからないときは省くか [] を渡し、それでも報告は妨げない。evidence で理由を説明し、他の確かめられる証拠を示せる。ID を推測したり、ドメイン/時刻で関連を推定したり、パケットを補うためだけに探査を繰り返したりしないこと。用途 baseline 通常の対照 / proof 脆弱性の証明 / verification 補足の検証 / supporting 補助の証拠。",
+			"items": obj(map[string]any{"traffic_id": str("traffic_search が返した本物の通信の ID"), "role": map[string]any{"type": "string", "enum": []string{"baseline", "proof", "verification", "supporting"}}, "note": str("その通信がどう脆弱性の結論を裏づけるか")}, "traffic_id")},
 	}, "vulnclass", "severity", "summary"), func(ctx context.Context, in json.RawMessage) (actool.Result, error) {
 		var a struct {
 			VulnClass, Name, Severity, Summary, Evidence string
@@ -1236,18 +1236,18 @@ func (t *ToolSet) addFinding() actool.CoreTool {
 			return actool.Errorf(err.Error()), nil
 		}
 		if t.ts == nil {
-			return actool.Errorf("report_finding 需要任务上下文；平台对话请通过 add_task_hint 向对应任务交接漏洞，并在提示中携带已有的 traffic_refs，由任务 Agent 登记。已登记漏洞可用 bind_finding_traffic 补绑。"), nil
+			return actool.Errorf("report_finding にはタスクのコンテキストが必要。プラットフォームの会話からは add_task_hint で対応するタスクに脆弱性を引き継ぎ、ヒントに既存の traffic_refs を添えて、タスクの Agent に登録させること。登録済みの脆弱性は bind_finding_traffic で後から結びつけられる。"), nil
 		}
 		// Auto-binding off: ignore the evidence params instead of rejecting the call.
 		// stripTrafficParameters already removes them from the advertised schema, but
 		// models routinely emit fields anyway — failing here would discard a confirmed
 		// finding over a stray parameter. The success path below reports evidence_status
-		// "not_bound" with the "已关闭，可在页面人工关联" note, which is what the caller needs.
+		// "not_bound" with the "オフになっているので、画面で人が関連付けられる" note, which is what the caller needs.
 		if !findingTrafficBindingEnabled() {
 			a.TrafficRefs, a.EvidenceHintID = nil, nil
 		}
 		if len(a.EvidenceHintID) > 0 && pid(a.EvidenceHintID) <= 0 {
-			return actool.Errorf("evidence_hint_id 必须为有效的提示节点 ID；无交接提示时省略"), nil
+			return actool.Errorf("evidence_hint_id は有効なヒントのノード ID でなければならない。引き継ぎのヒントがなければ省くこと"), nil
 		}
 		refs, err := t.findingRefsFromHint(pid(a.EvidenceHintID), a.TrafficRefs)
 		if err != nil {
@@ -1258,7 +1258,7 @@ func (t *ToolSet) addFinding() actool.CoreTool {
 		if t.findingRecorder != nil {
 			recorded, err = t.findingRecorder.Record(ctx, input, refs)
 		} else if len(refs) > 0 {
-			return actool.Errorf("流量证据存储不可用；未登记漏洞"), nil
+			return actool.Errorf("通信の証拠のストレージが使えないので、脆弱性は登録しなかった"), nil
 		} else {
 			recorded, err = t.ts.RecordFinding(ctx, input)
 		}
@@ -1287,9 +1287,9 @@ func (t *ToolSet) addFinding() actool.CoreTool {
 		}{RecordedFinding: recorded, EvidenceStatus: "bound"}
 		if len(recorded.Traffic.Bindings) == 0 {
 			result.EvidenceStatus = "not_bound"
-			result.EvidenceNote = "漏洞已保存，未绑定流量。TCP/无包情形可正常继续；若已有核实的 HTTP 流量，请用可用的 bind_finding_traffic 或漏洞页面补绑，再完成证据交接。不要重复创建漏洞。"
+			result.EvidenceNote = "脆弱性は保存したが、通信は結びつけていない。TCP/パケットのない場合は通常どおり続けてよい。確かめた HTTP の通信がすでにあれば、使える bind_finding_traffic か脆弱性のページで後から結びつけ、証拠の引き継ぎを終えること。脆弱性を重ねて作らないこと。"
 			if !findingTrafficBindingEnabled() {
-				result.EvidenceNote = "漏洞已保存。Agent 自动绑定流量已关闭，可在页面人工关联流量。"
+				result.EvidenceNote = "脆弱性は保存した。Agent による通信の自動の結びつけはオフになっているので、画面で人が通信を関連付けられる。"
 			}
 		}
 		raw, _ := json.Marshal(result)
@@ -1302,21 +1302,21 @@ func (t *ToolSet) addFinding() actool.CoreTool {
 // This is the home for observations and — importantly — negative results
 // ("port closed", "param not injectable", "no login found"). Such conclusions
 // must NOT be stuffed into the asset graph via upsert_asset.
-// factItem 是 record_fact 批量/单条的一条事实。
+// factItem は record_fact の一括/単発の1件の事実。
 type factItem struct {
 	Summary    string            `json:"summary"`
 	Detail     string            `json:"detail"`
-	Evidence   string            `json:"evidence"`   // 一行关键证据（命令+关键输出行），支撑结论、便于事后核对
-	Confidence string            `json:"confidence"` // observed（直接看到）| inferred（据现象推断）
+	Evidence   string            `json:"evidence"`   // 1行の重要な証拠（コマンド+重要な出力の行）。結論を裏づけ、事後の照合をしやすくする
+	Confidence string            `json:"confidence"` // observed（直接見た）| inferred（現象から推測した）
 	IntentID   json.RawMessage   `json:"intent_id"`
 	AssetIDs   []json.RawMessage `json:"asset_ids"`
 }
 
-// recordOneFact 写一条 fact 节点并连到意图（intent→yields→fact）。defaultIntent 为
-// 批量时的默认意图（本条未给 intent_id 时用）。
+// recordOneFact は fact のノードを1つ書いて意図につなぐ（intent→yields→fact）。defaultIntent は
+// 一括のときの既定の意図（この項目に intent_id がないときに使う）。
 func (t *ToolSet) recordOneFact(it factItem, defaultIntent int64) (int64, error) {
 	if strings.TrimSpace(it.Summary) == "" {
-		return 0, fmt.Errorf("summary 不能为空")
+		return 0, fmt.Errorf("summary は空にできない")
 	}
 	payload := map[string]any{"summary": it.Summary}
 	if it.Detail != "" {
@@ -1335,7 +1335,7 @@ func (t *ToolSet) recordOneFact(it factItem, defaultIntent int64) (int64, error)
 	if intent > 0 {
 		node, err := t.ts.GetNode(intent)
 		if err != nil || node == nil || node.Kind != db.KindIntent {
-			return 0, fmt.Errorf("intent_id 必须是本任务的意图（关联任务意图只读）")
+			return 0, fmt.Errorf("intent_id はこのタスクの意図でなければならない（関連するタスクの意図は読み取り専用）")
 		}
 	}
 	// a fact is its OWN node kind (distinct from a vuln finding).
@@ -1351,26 +1351,26 @@ func (t *ToolSet) recordOneFact(it factItem, defaultIntent int64) (int64, error)
 }
 
 func (t *ToolSet) recordFact() actool.CoreTool {
-	return t.writeExpTool("record_fact", "把探索【事实/结论】写入探索图，连到产生它的意图（intent_id）。用于记录探索结果——包括指纹/枚举等【正向结论】，和'端口关闭'/'参数不可注入'/'未发现登录入口'等【否定结论】。\n"+
-		"⚠️一次探索的多个观察要【汇总成一条事实】，不要拆成多条，可以合并成一条事实的就尽量用一条事实表示：summary=对本次结论的总结性一句话，detail=相关细节（可含多个具体项）。例：指纹意图→一条事实 {summary:'识别了 X 站点的技术栈与响应特征', detail:'nginx 1.25 / Vue3 / 200 / title=.. / body_len=..'}，而不是状态码、指纹、标题各记一条。一条意图通常只产出一条事实，拆太碎会让图谱无限膨胀。\n"+
-		"★facts 数组用于一次写多条【彼此不同】的结论（每条可省略 intent_id，默认用顶层 intent_id）。返回 ids 数组，与 facts 等长同序。\n"+
-		"⚠️只写你在工具输出里【真实看到】的结论，不要脑补。evidence 与 confidence 用来防止不准确的结论污染图谱：\n"+
-		"  · evidence=支撑本结论的【一行】关键证据（命令+最能证明的那一两行输出），**务必简洁**——细节已在 detail，这里不要再粘大段输出。\n"+
-		"  · confidence=observed（输出里直接看到）| inferred（据现象推断）。\n"+
-		"  · **否定类结论**（不可注入/端口关闭/未发现入口等）只写\"观察 + 试探性读法\"——陈述你实际看到什么，方向是否放弃由规划者综合全局定；务必给 evidence，手段没穷尽或证据弱（含只探一次、看起来像）标 inferred，确已穷尽且直接看到才标 observed。",
+	return t.writeExpTool("record_fact", "探索の【事実/結論】を探索グラフに書き込み、それを生んだ意図（intent_id）につなぐ。探索の結果の記録に使う——フィンガープリント/列挙などの【肯定の結論】と、「ポートが閉じている」/「引数はインジェクションできない」/「ログインの入口が見つからない」などの【否定の結論】を含む。\n"+
+		"⚠️1回の探索の複数の観察は【1件の事実にまとめ】、複数に分けないこと。1件の事実にまとめられるものはできるだけ1件で表す：summary=今回の結論をまとめた1文、detail=関係する細部（具体的な項目を複数含めてよい）。例：フィンガープリントの意図→事実1件 {summary:'X サイトの技術スタックとレスポンスの特徴を識別した', detail:'nginx 1.25 / Vue3 / 200 / title=.. / body_len=..'}。ステータスコード、フィンガープリント、タイトルをそれぞれ1件ずつ記録するのではない。1本の意図が生む事実は通常1件だけで、細かく分けすぎるとグラフが際限なく膨らむ。\n"+
+		"★facts 配列は一度に複数の【互いに異なる】結論を書くのに使う（各項目は intent_id を省いてよく、既定では最上位の intent_id を使う）。ids 配列を返し、facts と同じ長さ・同じ順序になる。\n"+
+		"⚠️ツールの出力で【本当に見た】結論だけを書き、想像で補わないこと。evidence と confidence は不正確な結論がグラフを汚すのを防ぐためのもの：\n"+
+		"  · evidence=この結論を裏づける【1行の】重要な証拠（コマンド+最もよく証明する1、2行の出力）。**必ず簡潔に**——細部はすでに detail にあるので、ここに大量の出力を貼らない。\n"+
+		"  · confidence=observed（出力で直接見た）| inferred（現象から推測した）。\n"+
+		"  · **否定の結論**（インジェクションできない/ポートが閉じている/入口が見つからないなど）は「観察 + 試しの読み」だけを書く——実際に何を見たかを述べ、方向を捨てるかどうかは計画者が全体を総合して決める。evidence は必ず付け、手段をやり尽くしていない、または証拠が弱い（1回だけ探った、そう見える、を含む）なら inferred、本当にやり尽くして直接見たときだけ observed を付ける。",
 		obj(map[string]any{
-			"facts":      map[string]any{"type": "array", "description": "【有多条不同结论时用】事实数组，元素字段同下方顶层字段（summary/detail/evidence/confidence/intent_id/asset_ids）；省略 intent_id 则用顶层 intent_id。返回 ids 与本数组等长、同序。", "items": map[string]any{"type": "object"}},
-			"summary":    str("对本次探索结论的【总结性一句话】（是对 detail 的概括）"),
-			"intent_id":  idp("产生本事实的意图 id（你领到的意图；批量时作为各条默认）"),
-			"detail":     str("本事实的相关细节：把这次探索的多个观察事实都写进这里"),
-			"evidence":   str("【一行】关键证据：命令 + 最能证明结论的那一两行输出。务必简洁，不要粘大段输出（细节放 detail）。"),
-			"confidence": str("observed（输出里直接看到）| inferred（据现象推断）。否定结论务必如实标注。"),
-			"asset_ids":  map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "相关资产 id（可选，0/1/多个）：该事实涉及哪些资产"},
+			"facts":      map[string]any{"type": "array", "description": "【異なる結論が複数あるときに使う】事実の配列で、要素のフィールドは下の最上位のフィールド（summary/detail/evidence/confidence/intent_id/asset_ids）と同じ。intent_id を省くと最上位の intent_id を使う。返す ids はこの配列と同じ長さ・同じ順序。", "items": map[string]any{"type": "object"}},
+			"summary":    str("今回の探索の結論を【まとめた1文】（detail を要約したもの）"),
+			"intent_id":  idp("この事実を生んだ意図の id（あなたが受け取った意図。一括のときは各項目の既定になる）"),
+			"detail":     str("この事実に関係する細部：今回の探索の複数の観察をすべてここに書く"),
+			"evidence":   str("【1行の】重要な証拠：コマンド + 結論を最もよく証明する1、2行の出力。必ず簡潔にし、大量の出力を貼らない（細部は detail に入れる）。"),
+			"confidence": str("observed（出力で直接見た）| inferred（現象から推測した）。否定の結論は必ずありのままに付ける。"),
+			"asset_ids":  map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "関係する資産の id（任意。0/1/複数）：この事実がどの資産に関わるか"},
 		}),
 		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
 			var a struct {
 				Facts    []factItem `json:"facts"`
-				factItem            // 单条模式 + 批量默认 intent_id
+				factItem            // 単発モード + 一括の既定の intent_id
 			}
 			_ = json.Unmarshal(in, &a)
 			batch := len(a.Facts) > 0
@@ -1378,7 +1378,7 @@ func (t *ToolSet) recordFact() actool.CoreTool {
 			if !batch {
 				items = []factItem{a.factItem}
 			}
-			defaultIntent := pid(a.factItem.IntentID) // 顶层 intent_id = 批量默认
+			defaultIntent := pid(a.factItem.IntentID) // 最上位の intent_id = 一括の既定
 
 			ids := make([]int64, len(items))
 			errs := map[string]string{}
@@ -1391,7 +1391,7 @@ func (t *ToolSet) recordFact() actool.CoreTool {
 				ids[i] = id
 			}
 
-			if !batch { // 单条：保持原返回
+			if !batch { // 単発：元の戻り値を保つ
 				if e, bad := errs["0"]; bad {
 					return actool.Errorf(e), nil
 				}
@@ -1411,13 +1411,13 @@ type hintItem struct {
 	TrafficRefs []db.TrafficRef   `json:"traffic_refs"`
 }
 
-// addOneHint 挂一条 hint 节点(active/human)到探索图,可锚定资产,返回 id。
+// addOneHint はヒントのノード(active/human)を探索グラフに1つ付け、資産に錨を下ろせる。id を返す。
 func (t *ToolSet) addOneHint(it hintItem) (int64, error) {
 	if len(it.TrafficRefs) > 0 && !findingTrafficBindingEnabled() {
-		return 0, fmt.Errorf("Agent 自动绑定流量已关闭，未保存携带 traffic_refs 的提示；可在系统设置开启，或仅交接文字")
+		return 0, fmt.Errorf("Agent による通信の自動の結びつけはオフになっているので、traffic_refs 付きのヒントは保存しなかった。システム設定でオンにするか、文だけを引き継ぐこと")
 	}
 	if strings.TrimSpace(it.Text) == "" {
-		return 0, fmt.Errorf("text 不能为空")
+		return 0, fmt.Errorf("text は空にできない")
 	}
 	var anchors []int64
 	for _, raw := range it.AssetIDs {
@@ -1433,8 +1433,8 @@ func (t *ToolSet) addOneHint(it hintItem) (int64, error) {
 	if len(refs) > 0 {
 		payload["traffic_refs"] = refs
 	}
-	// 唤醒 planner 不在此处逐条做——由 addHint 在整批写完后统一触发一次（带上提示文本），
-	// 避免一次 add_hint 多条提示逐条刷屏 planner 的触发行。
+	// planner を起こすのはここで1件ずつはしない——addHint が一括で書き終えてからまとめて1回起動する（ヒントの文を添えて）。
+	// 1回の add_hint の複数のヒントが1件ずつ planner の起動の行を埋め尽くすのを避ける。
 	return t.ts.AddNode(db.KindHint, payload, 0, "active", "human", anchors)
 }
 
@@ -1443,13 +1443,13 @@ type goalItem struct {
 	VulnClass string `json:"vulnclass"`
 }
 
-// addOneGoal 挂一条 goal 节点(open)到探索图:连到任务根(origin fact,rel spawns)。
-// origin 取 t.worker(缺省 system):goals 拆解器写入的记 "goals"、主 agent 运行时记
-// "human"。唤醒 planner 由 setGoals 在整批写完后统一做(见下),这里只负责落库。
+// addOneGoal は目標のノード(open)を探索グラフに1つ付ける：タスクの根(origin fact, rel spawns)につなぐ。
+// origin は t.worker(既定は system)：goals の分解器が書いたものは "goals"、メイン agent の実行時は
+// "human"。planner を起こすのは setGoals が一括で書き終えてからまとめて行う(下を参照)。ここは保存だけを受け持つ。
 func (t *ToolSet) addOneGoal(it goalItem) (int64, error) {
 	text := strings.TrimSpace(it.Text)
 	if text == "" {
-		return 0, fmt.Errorf("text 不能为空")
+		return 0, fmt.Errorf("text は空にできない")
 	}
 	payload := map[string]any{"text": text}
 	if vc := strings.TrimSpace(it.VulnClass); vc != "" {
@@ -1469,25 +1469,25 @@ func (t *ToolSet) addOneGoal(it goalItem) (int64, error) {
 	return id, nil
 }
 
-// setGoals 给【本任务】新增探索目标(goal 节点)。既是目标拆解器的提交工具,也是主
-// agent 运行时补目标的工具——同一个受管工具,可在 web 端改描述/schema、按 agent 绑定。
+// setGoals は【このタスク】に探索の目標(goal ノード)を追加する。目標の分解器の提出ツールでもあり、メイン
+// agent の実行時に目標を補うツールでもある——同じ管理されたツールで、web 側で説明/schema を変えたり、agent ごとに結びつけたりできる。
 func (t *ToolSet) setGoals() actool.CoreTool {
 	return writeTool("set_goals",
-		"给【本任务】新增探索目标(goal)。目标=最终可交付/可核验的结果,不是攻击步骤或侦察动作。\n"+
-			"★优先批量:多个目标放进 goals 数组一次提交,返回 ids 与之等长同序(失败项 id=0,详情见 errors)。单条则省略 goals 直接给顶层 text。\n"+
-			"vulnclass 可选:对应漏洞类(如 SQLi/IDOR),业务逻辑类目标留空。目标是否达成由系统判定标记 met,本工具只负责新增。",
+		"【このタスク】に探索の目標(goal)を追加する。目標=最終的に引き渡せる/確かめられる結果であり、攻撃の手順や偵察の動作ではない。\n"+
+			"★まとめて出すことを優先：複数の目標は goals 配列に入れて一度に提出する。ids を返し、それと同じ長さ・同じ順序になる(失敗した項目の id=0。詳細は errors を参照)。単発なら goals を省いて最上位の text を直接渡す。\n"+
+			"vulnclass は任意：対応する脆弱性の種類(SQLi/IDOR など)。ビジネスロジック系の目標は空にする。目標を達成したかはシステムが判定して met を付ける。このツールは追加だけを受け持つ。",
 		obj(map[string]any{
-			"goals":     map[string]any{"type": "array", "description": "【优先用这个】要新增的目标数组,按顺序处理。每个元素:text(必填,一个独立可验证的最终目标)+ vulnclass(可选)。返回 ids 与本数组等长、同序。", "items": map[string]any{"type": "object"}},
-			"text":      str("[单条] 一个独立可验证的最终目标"),
-			"vulnclass": str("[单条] 对应漏洞类(若明确),如 SQLi/IDOR;业务逻辑目标可留空"),
+			"goals":     map[string]any{"type": "array", "description": "【こちらを優先して使う】追加する目標の配列で、順に処理する。各要素：text(必須。独立して確かめられる最終的な目標1つ)+ vulnclass(任意)。返す ids はこの配列と同じ長さ・同じ順序。", "items": map[string]any{"type": "object"}},
+			"text":      str("[単発] 独立して確かめられる最終的な目標1つ"),
+			"vulnclass": str("[単発] 対応する脆弱性の種類(はっきりしているなら)。SQLi/IDOR など。ビジネスロジックの目標は空でよい"),
 		}),
 		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
 			if t.ts == nil {
-				return actool.Errorf("set_goals 未启用: ExplorationStore 未初始化"), nil
+				return actool.Errorf("set_goals は有効になっていない: ExplorationStore が初期化されていない"), nil
 			}
 			var a struct {
 				Goals    []goalItem `json:"goals"`
-				goalItem            // 单条模式:顶层 text/vulnclass
+				goalItem            // 単発モード：最上位の text/vulnclass
 			}
 			_ = json.Unmarshal(in, &a)
 			batch := len(a.Goals) > 0
@@ -1509,23 +1509,23 @@ func (t *ToolSet) setGoals() actool.CoreTool {
 				addedTexts = append(addedTexts, strings.TrimSpace(it.Text))
 			}
 			if len(addedTexts) > 0 {
-				// 唤醒 planner(整批一次)。优先 notifyGoal:一次 set_goals 记一条「人新增了
-				// N 个目标:…」触发,不逐条刷屏;拆解器/worker 无此回调 → 退回纯 notify(拆解器
-				// round-0 连 notify 也没接,即无操作,因为此时 planner 尚未启动)。
+				// planner を起こす(一括で1回)。notifyGoal を優先：1回の set_goals で「人が目標を
+				// N 件追加した：…」の起動を1件記録し、1件ずつ埋め尽くさない。分解器/worker にはこのコールバックがない → 素の notify に戻る(分解器の
+				// round-0 は notify もつないでおらず、何もしない。このとき planner はまだ起動していないため)。
 				switch {
 				case t.notifyGoal != nil:
 					t.notifyGoal(addedTexts)
 				case t.notify != nil:
 					t.notify()
 				}
-				// 主 agent 运行时新增目标 → 把已完成/暂停的任务拉回 running 继续跑(终态门会
-				// 吞掉普通 notify,必须显式复活)。仅 mainagent 接了此回调;拆解器/worker 为 nil。
+				// メイン agent の実行時に目標を追加した → 完了/一時停止したタスクを running に戻して続ける(終端の門は
+				// 通常の notify を飲み込むので、明示的に復活させる必要がある)。このコールバックをつないでいるのは mainagent だけ。分解器/worker は nil。
 				if t.resumeTask != nil {
 					t.resumeTask()
 				}
 			}
 
-			if !batch { // 单条:保持原返回
+			if !batch { // 単発：元の戻り値を保つ
 				if e, bad := errs["0"]; bad {
 					return actool.Errorf(e), nil
 				}
@@ -1544,44 +1544,44 @@ type constraintItem struct {
 	Type string `json:"type"` // allow | deny
 }
 
-// addOneConstraint 落一条操作约束到 task_constraints。origin 取 t.worker(缺省 system):
-// 拆解器写 "goals"、主 agent 写 "human"。
+// addOneConstraint は操作の制約を1件 task_constraints に保存する。origin は t.worker(既定は system)：
+// 分解器が書いたものは "goals"、メイン agent が書いたものは "human"。
 func (t *ToolSet) addOneConstraint(it constraintItem) (int64, error) {
 	text := strings.TrimSpace(it.Text)
 	if text == "" {
-		return 0, fmt.Errorf("text 不能为空")
+		return 0, fmt.Errorf("text は空にできない")
 	}
 	kind := strings.TrimSpace(strings.ToLower(it.Type))
 	if kind == "" {
-		kind = "deny" // 默认按禁止处理:未标注类型时更保守
+		kind = "deny" // 既定では禁止として扱う：種類の印がないときはより保守的に
 	}
 	if kind != "allow" && kind != "deny" {
-		return 0, fmt.Errorf("type 必须是 allow 或 deny")
+		return 0, fmt.Errorf("type は allow か deny でなければならない")
 	}
 	return t.ts.AddConstraint(kind, text, t.worker)
 }
 
-// setConstraints 给【本任务】新增操作约束(allow=允许做什么 / deny=禁止做什么)。既是目标
-// 拆解器 round-0 抽约束的提交工具,也是主 agent 运行时补约束的工具——同一受管工具,可在 web
-// 端改描述/schema、按 agent 绑定。约束会被注入 planner/worker 的系统提示以约束探索边界。
+// setConstraints は【このタスク】に操作の制約(allow=何をしてよいか / deny=何を禁じるか)を追加する。目標の
+// 分解器が round-0 で制約を抜き出すときの提出ツールでもあり、メイン agent の実行時に制約を補うツールでもある——同じ管理されたツールで、web
+// 側で説明/schema を変えたり、agent ごとに結びつけたりできる。制約は planner/worker のシステムプロンプトに注入され、探索の境界を縛る。
 func (t *ToolSet) setConstraints() actool.CoreTool {
 	return writeTool("set_constraints",
-		"给【本任务】新增操作约束,用来框定探索边界:type=allow(允许做的操作)或 deny(禁止做的操作)。\n"+
-			"约束=对『可以/不可以做哪些操作』的规定(如『仅测当前端口,不扫其他端口』『禁止对生产库做写操作』『只允许被动侦察』),不是目标、也不是攻击步骤。\n"+
-			"★优先批量:多条放进 constraints 数组一次提交,返回 ids 与之等长同序(失败项 id=0,详情见 errors)。单条则省略 constraints 直接给顶层 text/type。\n"+
-			"只登记任务目标/描述里【明确写出】的约束,不要臆造;拿不准类型时用 deny(更保守)。",
+		"【このタスク】に操作の制約を追加し、探索の境界を枠づける：type=allow(してよい操作)または deny(禁じる操作)。\n"+
+			"制約=『どの操作をしてよい/してはいけないか』の定め(『現在のポートだけをテストし、他のポートはスキャンしない』『本番の DB への書き込み操作を禁じる』『受動的な偵察だけを許す』など)であり、目標でも攻撃の手順でもない。\n"+
+			"★まとめて出すことを優先：複数件は constraints 配列に入れて一度に提出する。ids を返し、それと同じ長さ・同じ順序になる(失敗した項目の id=0。詳細は errors を参照)。単発なら constraints を省いて最上位の text/type を直接渡す。\n"+
+			"タスクの目標/説明に【はっきり書かれた】制約だけを登録し、作り上げないこと。種類に迷ったら deny(より保守的)を使う。",
 		obj(map[string]any{
-			"constraints": map[string]any{"type": "array", "description": "【优先用这个】要新增的约束数组,按顺序处理。每个元素:text(必填,一条约束)+ type(allow|deny)。返回 ids 与本数组等长、同序。", "items": map[string]any{"type": "object"}},
-			"text":        str("[单条] 一条操作约束的内容"),
-			"type":        str("[单条] allow(允许)或 deny(禁止);缺省按 deny 处理"),
+			"constraints": map[string]any{"type": "array", "description": "【こちらを優先して使う】追加する制約の配列で、順に処理する。各要素：text(必須。制約1件)+ type(allow|deny)。返す ids はこの配列と同じ長さ・同じ順序。", "items": map[string]any{"type": "object"}},
+			"text":        str("[単発] 操作の制約1件の内容"),
+			"type":        str("[単発] allow(許可)または deny(禁止)。省略すると deny として扱う"),
 		}),
 		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
 			if t.ts == nil {
-				return actool.Errorf("set_constraints 未启用: ExplorationStore 未初始化"), nil
+				return actool.Errorf("set_constraints は有効になっていない: ExplorationStore が初期化されていない"), nil
 			}
 			var a struct {
 				Constraints    []constraintItem `json:"constraints"`
-				constraintItem                  // 单条模式:顶层 text/type
+				constraintItem                  // 単発モード：最上位の text/type
 			}
 			_ = json.Unmarshal(in, &a)
 			batch := len(a.Constraints) > 0
@@ -1599,7 +1599,7 @@ func (t *ToolSet) setConstraints() actool.CoreTool {
 				}
 				ids[i] = id
 			}
-			if !batch { // 单条:保持简单返回
+			if !batch { // 単発：簡単な戻り値を保つ
 				if e, bad := errs["0"]; bad {
 					return actool.Errorf(e), nil
 				}
@@ -1614,18 +1614,18 @@ func (t *ToolSet) setConstraints() actool.CoreTool {
 }
 
 func (t *ToolSet) addHint() actool.CoreTool {
-	return t.writeExpTool("add_hint", "把人类/主 agent 的战略提示挂到探索图，规划者下次生成意图时会读到它。\n"+
-		"★优先批量：多条提示放进 hints 数组一次提交（比逐条调用省往返）。返回 ids 数组，与 hints 等长同序（失败项 id=0，详情见 errors）。单条则省略 hints 直接给顶层 text。",
+	return t.writeExpTool("add_hint", "人間/メイン agent の戦略上のヒントを探索グラフに付ける。計画者が次に意図を生成するときにそれを読む。\n"+
+		"★まとめて出すことを優先：複数のヒントは hints 配列に入れて一度に提出する（1件ずつ呼ぶより往復が少ない）。ids 配列を返し、hints と同じ長さ・同じ順序になる（失敗した項目の id=0。詳細は errors を参照）。単発なら hints を省いて最上位の text を直接渡す。",
 		obj(map[string]any{
-			"hints":        map[string]any{"type": "array", "description": "【优先用这个】要新增的提示数组，按顺序处理。每个元素字段同下方顶层字段（text/asset_ids/traffic_refs）。返回 ids 与本数组等长、同序。", "items": obj(map[string]any{"text": str("提示内容"), "asset_ids": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}}, "traffic_refs": HintTrafficSchema()})},
-			"text":         str("[单条] 提示内容，如'重点挖认证后接口'"),
+			"hints":        map[string]any{"type": "array", "description": "【こちらを優先して使う】追加するヒントの配列で、順に処理する。各要素のフィールドは下の最上位のフィールド（text/asset_ids/traffic_refs）と同じ。返す ids はこの配列と同じ長さ・同じ順序。", "items": obj(map[string]any{"text": str("ヒントの内容"), "asset_ids": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}}, "traffic_refs": HintTrafficSchema()})},
+			"text":         str("[単発] ヒントの内容。例：'認証後のインターフェースを重点的に掘る'"),
 			"traffic_refs": HintTrafficSchema(),
-			"asset_ids":    map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "锚定的资产 id（可选，0/1/多个）"},
+			"asset_ids":    map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "錨を下ろす資産の id（任意。0/1/複数）"},
 		}),
 		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
 			var a struct {
 				Hints    []hintItem `json:"hints"`
-				hintItem            // 单条模式：顶层 text/asset_ids
+				hintItem            // 単発モード：最上位の text/asset_ids
 			}
 			_ = json.Unmarshal(in, &a)
 			batch := len(a.Hints) > 0
@@ -1647,9 +1647,9 @@ func (t *ToolSet) addHint() actool.CoreTool {
 				addedTexts = append(addedTexts, strings.TrimSpace(it.Text))
 			}
 			if len(addedTexts) > 0 {
-				// 唤醒 planner（整批一次）。优先 notifyHint：一次 add_hint 记一条「人新增了
-				// N 条战略提示：…」触发，让 planner 明确"本轮由新增 hint 触发"并看到提示内容；
-				// 未接该回调时退回纯 notify（bare wake，hint 仍折在图里供其自行读取）。
+				// planner を起こす（一括で1回）。notifyHint を優先：1回の add_hint で「人が戦略上のヒントを
+				// N 件追加した：…」の起動を1件記録し、planner に「このラウンドはヒントの追加で起動した」ことをはっきりさせ、ヒントの内容を見せる。
+				// このコールバックがつながっていなければ素の notify に戻る（bare wake。ヒントは引き続きグラフにたたまれ、自分で読める）。
 				switch {
 				case t.notifyHint != nil:
 					t.notifyHint(addedTexts)
@@ -1658,7 +1658,7 @@ func (t *ToolSet) addHint() actool.CoreTool {
 				}
 			}
 
-			if !batch { // 单条：保持原返回
+			if !batch { // 単発：元の戻り値を保つ
 				if e, bad := errs["0"]; bad {
 					return actool.Errorf(e), nil
 				}
@@ -1674,11 +1674,11 @@ func (t *ToolSet) addHint() actool.CoreTool {
 
 // killWorkTool lets the planner terminate a single running work (by intent id).
 func (t *ToolSet) killWorkTool() actool.CoreTool {
-	return t.writeExpTool("kill_work", "终止一条正在运行的意图(work)。用于叫停跑偏/无意义的探索；被终止的意图标记为 stopped，不再自动重领。先用 get_worker_output 看看它在干嘛再决定。",
-		obj(map[string]any{"intent_id": idp("要终止的意图 id（= work 句柄）")}, "intent_id"),
+	return t.writeExpTool("kill_work", "実行中の意図(work)を1つ終わらせる。それた/意味のない探索を止めるのに使う。終わらせた意図は stopped になり、もう自動では取り直されない。まず get_worker_output で何をしているかを見てから決める。",
+		obj(map[string]any{"intent_id": idp("終わらせる意図の id（= work のハンドル）")}, "intent_id"),
 		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
 			if t.killWork == nil {
-				return actool.Errorf("kill_work 当前不可用"), nil
+				return actool.Errorf("kill_work は今は使えない"), nil
 			}
 			var a struct {
 				IntentID json.RawMessage `json:"intent_id"`
@@ -1686,32 +1686,32 @@ func (t *ToolSet) killWorkTool() actool.CoreTool {
 			_ = json.Unmarshal(in, &a)
 			id := pid(a.IntentID)
 			if id <= 0 {
-				return actool.Errorf("intent_id 必填"), nil
+				return actool.Errorf("intent_id は必須"), nil
 			}
 			node, err := t.ts.GetNode(id)
 			if err != nil || node == nil || node.Kind != db.KindIntent {
-				return actool.Errorf("intent_id 必须是本任务的意图（关联任务意图只读）"), nil
+				return actool.Errorf("intent_id はこのタスクの意図でなければならない（関連するタスクの意図は読み取り専用）"), nil
 			}
 			if err := t.killWork(id); err != nil {
 				return actool.Errorf(err.Error()), nil
 			}
-			return actool.Text(fmt.Sprintf("已向意图 %d 的 work 发送终止信号", id)), nil
+			return actool.Text(fmt.Sprintf("意図 %d の work に終了の合図を送った", id)), nil
 		})
 }
 
 // steerWorkTool lets the planner inject a mid-run course-correction into a running
 // work WITHOUT killing it: the message reaches the worker before its next tool call,
 // which re-plans its next step (already-gathered context is kept). For in-intent
-// nudges ("停做 X、聚焦 Y"); if the whole direction is wrong use kill_work + a new intent.
+// nudges ("X をやめて Y に集中"); if the whole direction is wrong use kill_work + a new intent.
 func (t *ToolSet) steerWorkTool() actool.CoreTool {
-	return t.writeExpTool("steer_work", "给一条正在运行的意图(work)实时注入纠偏指令，不打断它、不丢已有进展：worker 会在下一步动作前收到你的指令并据此调整。用于'别再走 X、聚焦 Y'这类【意图内】纠偏；若方向整个错了应改用 kill_work 再下新意图。建议先用 get_worker_output 看它在干嘛。",
+	return t.writeExpTool("steer_work", "実行中の意図(work)に軌道修正の指示をその場で注入する。中断せず、これまでの進み具合も失わない：worker は次の動作の前にあなたの指示を受け取り、それに沿って調整する。'X をもう追わず、Y に集中'のような【意図の中での】軌道修正に使う。方向がまるごと間違っているなら kill_work をしてから新しい意図を出すこと。先に get_worker_output で何をしているかを見るとよい。",
 		obj(map[string]any{
-			"intent_id": idp("要纠偏的意图 id（= work 句柄）"),
-			"message":   str("给 worker 的纠偏指令，明确让它停止什么、转向什么"),
+			"intent_id": idp("軌道修正する意図の id（= work のハンドル）"),
+			"message":   str("worker への軌道修正の指示。何をやめ、何に向かうかをはっきりさせる"),
 		}, "intent_id", "message"),
 		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
 			if t.steerWork == nil {
-				return actool.Errorf("steer_work 当前不可用"), nil
+				return actool.Errorf("steer_work は今は使えない"), nil
 			}
 			var a struct {
 				IntentID json.RawMessage `json:"intent_id"`
@@ -1720,26 +1720,26 @@ func (t *ToolSet) steerWorkTool() actool.CoreTool {
 			_ = json.Unmarshal(in, &a)
 			id := pid(a.IntentID)
 			if id <= 0 {
-				return actool.Errorf("intent_id 必填"), nil
+				return actool.Errorf("intent_id は必須"), nil
 			}
 			node, err := t.ts.GetNode(id)
 			if err != nil || node == nil || node.Kind != db.KindIntent {
-				return actool.Errorf("intent_id 必须是本任务的意图（关联任务意图只读）"), nil
+				return actool.Errorf("intent_id はこのタスクの意図でなければならない（関連するタスクの意図は読み取り専用）"), nil
 			}
 			if strings.TrimSpace(a.Message) == "" {
-				return actool.Errorf("message 必填"), nil
+				return actool.Errorf("message は必須"), nil
 			}
 			if err := t.steerWork(id, a.Message); err != nil {
 				return actool.Errorf(err.Error()), nil
 			}
-			return actool.Text(fmt.Sprintf("已向意图 %d 的 work 注入纠偏指令（下一步生效）", id)), nil
+			return actool.Text(fmt.Sprintf("意図 %d の work に軌道修正の指示を注入した（次の手順から効く）", id)), nil
 		})
 }
 
-// getWorkerOutput returns a work's final (or截至中止时的) conclusion text by intent id.
+// getWorkerOutput returns a work's final (or 中断した時点までの) conclusion text by intent id.
 func (t *ToolSet) getWorkerOutput() actool.CoreTool {
-	return t.readExpTool("get_worker_output", "取本任务或直接关联任务某条意图(work)的最终输出结论。关联任务结果带 source_task_id/inherited=true 且只读。正常结束返回其总结；被终止(stopped)/异常的 work 返回其截至中止时的最后输出。",
-		obj(map[string]any{"intent_id": idp("意图 id（= work 句柄）")}, "intent_id"),
+	return t.readExpTool("get_worker_output", "このタスクまたは直接関連するタスクのある意図(work)の最終的な出力の結論を取得する。関連するタスクの結果には source_task_id/inherited=true が付き、読み取り専用。正常に終わったものはその総括を返す。終わらせた(stopped)/異常の work は中断した時点までの最後の出力を返す。",
+		obj(map[string]any{"intent_id": idp("意図の id（= work のハンドル）")}, "intent_id"),
 		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
 			var a struct {
 				IntentID json.RawMessage `json:"intent_id"`
@@ -1747,14 +1747,14 @@ func (t *ToolSet) getWorkerOutput() actool.CoreTool {
 			_ = json.Unmarshal(in, &a)
 			id := pid(a.IntentID)
 			if id <= 0 {
-				return actool.Errorf("intent_id 必填"), nil
+				return actool.Errorf("intent_id は必須"), nil
 			}
 			intentNode, err := t.ts.GetNodeWithSources(id)
 			if err != nil {
 				return actool.Errorf(err.Error()), nil
 			}
 			if intentNode == nil || intentNode.Kind != db.KindIntent {
-				return actool.Errorf("intent_id 不属于本任务或其直接关联任务"), nil
+				return actool.Errorf("intent_id はこのタスクにもその直接関連するタスクにも属さない"), nil
 			}
 			acts, _, err := t.ts.ActivityListWithSources(id, 0, 1000)
 			if err != nil {
@@ -1777,10 +1777,10 @@ func (t *ToolSet) getWorkerOutput() actool.CoreTool {
 			if pick == nil {
 				if intentNode.Inherited {
 					return jsonResult(inheritedMap(map[string]any{
-						"intent_id": id, "final_text": "（该 work 尚无任何输出）",
+						"intent_id": id, "final_text": "（この work にはまだ出力がない）",
 					}, intentNode.SourceTaskID))
 				}
-				return actool.Text("（该 work 尚无任何输出）"), nil
+				return actool.Text("（この work にはまだ出力がない）"), nil
 			}
 			detail, _ := t.ts.ActivityDetailWithSources(pick.ID)
 			if detail == "" {
@@ -1820,16 +1820,16 @@ func traceSteps(acts []db.Activity) []map[string]any {
 // few specific steps. Thinking steps are excluded everywhere.
 func (t *ToolSet) getWorkerTrace() actool.CoreTool {
 	return t.readExpTool("get_worker_trace",
-		"查看某条意图(work)的【执行过程】（区别于 get_worker_output 只给最终结论）。三种用法：\n"+
-			"① 只传 intent_id → 返回该 work 每一步的摘要流（summary≤100字，含 step_id；只是动作轮廓，不含完整输出）；\n"+
-			"② intent_id + q → 只返回命中关键字的步骤摘要（在摘要和完整输出里都搜；仍只给 summary，要看内容用③）；\n"+
-			"③ intent_id + step_ids → 返回这些步骤的完整内容(detail)；一次最多取 5 个，超出只返回前 5 个并在 notice/omitted_step_ids 里告知未取的。\n"+
-			"典型流程：先①/②定位可疑步骤的 step_id，再用③取其完整输出。不含思考(thinking)步骤。支持直接关联任务的历史 trace；其结果带 source_task_id/inherited=true 且只读。",
+		"ある意図(work)の【実行の過程】を見る（get_worker_output が最終的な結論だけを渡すのとは違う）。使い方は3つ：\n"+
+			"① intent_id だけを渡す → その work の各手順の要約の流れを返す（summary≤100字、step_id 付き。動作の輪郭だけで、完全な出力は含まない）；\n"+
+			"② intent_id + q → キーワードに一致した手順の要約だけを返す（要約と完全な出力の両方を検索する。返すのは summary だけで、内容を見るには③を使う）；\n"+
+			"③ intent_id + step_ids → それらの手順の完全な内容(detail)を返す。一度に取れるのは最大 5 個で、超えたら先頭の 5 個だけを返し、取らなかったものを notice/omitted_step_ids で知らせる。\n"+
+			"典型的な流れ：まず①/②で怪しい手順の step_id を突き止め、それから③で完全な出力を取る。思考(thinking)の手順は含まない。直接関連するタスクの過去の trace にも対応し、その結果には source_task_id/inherited=true が付き、読み取り専用。",
 		obj(map[string]any{
-			"intent_id": idp("意图 id（= work 句柄）"),
-			"q":         str("关键字：只返回摘要/完整输出命中它的步骤（可选；与 step_ids 互斥）"),
-			"step_ids":  map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "要取完整内容的 step_id（来自①/②返回；一次最多取 5 个，多传只返回前 5 个，其余在 omitted_step_ids 里列出）"},
-			"limit":     intp("摘要流/检索的返回上限（可选）"),
+			"intent_id": idp("意図の id（= work のハンドル）"),
+			"q":         str("キーワード：要約/完全な出力がそれに一致した手順だけを返す（任意。step_ids とは同時に使えない）"),
+			"step_ids":  map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "完全な内容を取る step_id（①/②が返したもの。一度に取れるのは最大 5 個で、多く渡しても先頭の 5 個だけを返し、残りは omitted_step_ids に並べる）"},
+			"limit":     intp("要約の流れ/検索の返す上限（任意）"),
 		}, "intent_id"),
 		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
 			var a struct {
@@ -1841,14 +1841,14 @@ func (t *ToolSet) getWorkerTrace() actool.CoreTool {
 			_ = json.Unmarshal(in, &a)
 			id := pid(a.IntentID)
 			if id <= 0 {
-				return actool.Errorf("intent_id 必填"), nil
+				return actool.Errorf("intent_id は必須"), nil
 			}
 			intentNode, nodeErr := t.ts.GetNodeWithSources(id)
 			if nodeErr != nil {
 				return actool.Errorf(nodeErr.Error()), nil
 			}
 			if intentNode == nil || intentNode.Kind != db.KindIntent {
-				return actool.Errorf("intent_id 不属于本任务或其直接关联任务"), nil
+				return actool.Errorf("intent_id はこのタスクにもその直接関連するタスクにも属さない"), nil
 			}
 			// ③ detail drill-down by step ids, thinking excluded by the store.
 			if len(a.StepIDs) > 0 {
@@ -1896,8 +1896,8 @@ func (t *ToolSet) getWorkerTrace() actool.CoreTool {
 					// whether another call is worth it; the notice states the same in prose.
 					result["omitted_step_ids"] = omitted
 					result["notice"] = fmt.Sprintf(
-						"每次最多取 %d 个步骤的完整内容，本次已返回前 %d 个（%v），未取的 %d 个为 %v。"+
-							"若这些内容已足够定位，则无需再取剩余步骤；确需继续时，用这些 step_id 再调一次。",
+						"一度に完全な内容を取れる手順は最大 %d 個で、今回は先頭の %d 個（%v）を返した。取らなかった %d 個は %v。"+
+							"これらの内容で十分に突き止められるなら、残りの手順を取る必要はない。どうしても続けるときは、これらの step_id でもう一度呼ぶこと。",
 						maxStepIDs, len(ids), ids, len(omitted), omitted)
 				}
 				if intentNode.Inherited {
@@ -1929,12 +1929,12 @@ func (t *ToolSet) getWorkerTrace() actool.CoreTool {
 // summaries (≤100 chars), each tagged with its intent_id for follow-up drill-down.
 func (t *ToolSet) searchAllWorkerTraces() actool.CoreTool {
 	return t.readExpTool("search_all_worker_traces",
-		"【通常不推荐使用，因为系统中已经给了大部分信息了】在【本任务其他 work 的执行过程】里按关键字(q)检索——用于找回某个 worker 见过、却没写进 fact 的东西（某路径/token/报错等）。"+
-			"已自动排除你自己这条意图的步骤（那些本就在你上下文里）。"+
-			"只返回命中步骤的摘要(summary≤100字)，每条带 intent_id；据此再用 get_worker_trace(intent_id, step_ids=[...]) 取完整内容。",
+		"【通常は使うことを勧めない。システムがすでにほとんどの情報を渡しているため】【このタスクの他の work の実行の過程】をキーワード(q)で検索する——ある worker が見たのに fact に書いていないもの（あるパス/token/エラーなど）を取り戻すのに使う。"+
+			"あなた自身のこの意図の手順は自動で除いてある（それらはもともとあなたのコンテキストにある）。"+
+			"一致した手順の要約(summary≤100字)だけを返し、各件に intent_id が付く。それをもとに get_worker_trace(intent_id, step_ids=[...]) で完全な内容を取る。",
 		obj(map[string]any{
-			"q":     str("关键字（在所有 work 步骤的摘要+完整输出里搜）"),
-			"limit": intp("返回上限，默认 100（可选）"),
+			"q":     str("キーワード（すべての work の手順の要約+完全な出力を検索する）"),
+			"limit": intp("返す上限。既定 100（任意）"),
 		}, "q"),
 		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
 			var a struct {
@@ -1943,9 +1943,9 @@ func (t *ToolSet) searchAllWorkerTraces() actool.CoreTool {
 			}
 			_ = json.Unmarshal(in, &a)
 			if strings.TrimSpace(a.Q) == "" {
-				return actool.Errorf("q 必填"), nil
+				return actool.Errorf("q は必須"), nil
 			}
-			// 排除调用者自身这条意图的步骤（worker 的自有 trace 已在其上下文里）。
+			// 呼び出した側自身のこの意図の手順を除く（worker 自身の trace はすでにそのコンテキストにある）。
 			acts, err := t.ts.ActivityTraceSearchAllWithSources(t.ownerNode, a.Q, a.Limit)
 			if err != nil {
 				return actool.Errorf(err.Error()), nil
@@ -1978,12 +1978,12 @@ func (t *ToolSet) searchAllWorkerTraces() actool.CoreTool {
 // no process to inspect).
 func (t *ToolSet) listWorkerTraces() actool.CoreTool {
 	return t.readExpTool("list_worker_traces",
-		"【通常不推荐使用，因为系统中已经给了大部分信息了】列出本任务里【已跑过的 work（意图）】索引：intent_id + 一句话方向(summary) + 状态。"+
-			"你(worker)看不到探索图，用它来发现有哪些 work 值得翻看——再用 get_worker_trace(intent_id) 看其步骤、get_worker_trace(intent_id, step_ids=[...]) 取详情。"+
-			"只列已执行的(running/done/exhausted/blocked/stopped)，不含还没跑的 open。注意：你的任务边界仍是你领到的那条意图，看别的 work 只为复用观察/避免重复劳动。",
+		"【通常は使うことを勧めない。システムがすでにほとんどの情報を渡しているため】このタスクの【すでに実行した work（意図）】の索引を一覧にする：intent_id + 1文の方向(summary) + 状態。"+
+			"あなた(worker)には探索グラフが見えないので、これを使ってどの work を読み返す価値があるかを見つける——それから get_worker_trace(intent_id) でその手順を見て、get_worker_trace(intent_id, step_ids=[...]) で詳細を取る。"+
+			"実行済みのもの(running/done/exhausted/blocked/stopped)だけを並べ、まだ実行していない open は含まない。注意：あなたのタスクの境界は引き続きあなたが受け取った意図であり、他の work を見るのは観察を再利用し、重複した作業を避けるためだけ。",
 		obj(map[string]any{
-			"q":     str("按 summary 关键字过滤（可选）"),
-			"limit": intp("返回上限，默认 50（可选）"),
+			"q":     str("summary のキーワードで絞り込む（任意）"),
+			"limit": intp("返す上限。既定 50（任意）"),
 		}),
 		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
 			var a struct {
@@ -2037,18 +2037,18 @@ func (t *ToolSet) PlannerTools() []actool.CoreTool {
 		t.expandDigest(),
 		t.getWorkerOutput(), t.getWorkerTrace(), t.searchAllWorkerTraces(), t.listGoals(), t.addIntent(), t.proveGoal(), t.goalMet(),
 		t.killWorkTool(), t.steerWorkTool(),
-		// report_finding：规划态势研判时若自身已确证漏洞，可直接登记（与 worker 同工具）。
+		// report_finding：計画で状況を判断するときに自分で脆弱性を確認したなら、直接登録できる（worker と同じツール）。
 		t.addFinding(),
-		// list_companies：查看企业列表 + scope + 资产数（拿 company_id / 理解归属范围）。
+		// list_companies：企業の一覧 + scope + 資産の数を見る（company_id を取る / 帰属の範囲を理解する）。
 		t.listCompanies(),
-		// list_assets：规划时按 DSL 检索全资产库（配合 list_untested_assets 的"范围内未测"视角，
-		// 补上"按域名/指纹/端口/状态码等条件在整库里查"的能力）。
+		// list_assets：計画するときに DSL で全資産の DB を検索する（list_untested_assets の「範囲内で未テスト」の見方と組み合わせ、
+		// 「ドメイン/フィンガープリント/ポート/ステータスコードなどの条件で DB 全体を調べる」力を補う）。
 		t.listAssets(),
-		// add_company_scope：规划时可把域名/IP/CIDR/ICP/关键词纳入某公司的资产范围（自动认领命中资产）。
+		// add_company_scope：計画するときに、ドメイン/IP/CIDR/ICP/キーワードをある会社の資産の範囲に入れられる（一致した資産を自動で引き受ける）。
 		t.addCompanyScope(),
-		// add_task_scope：主动把整根域/整公司/某子域/IP 纳入本任务测试范围(覆盖度分母)。
+		// add_task_scope：ルートドメイン全体/会社全体/あるサブドメイン/IP を自分からこのタスクのテスト範囲(カバレッジの分母)に入れる。
 		t.addTaskScope(),
-		// list_untested_assets：按需查本任务范围内未测资产(类型+分页)，自行决定补测。
+		// list_untested_assets：必要に応じてこのタスクの範囲内の未テストの資産を調べ(種類+ページ分け)、テストを補うかを自分で決める。
 		t.listUntestedAssets(),
 	}
 }

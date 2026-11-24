@@ -442,7 +442,7 @@ func (s *Server) pgSendConversationMessage(w http.ResponseWriter, r *http.Reques
 	}
 	var req struct {
 		Message     string           `json:"message"`
-		Attachments []chatAttachment `json:"attachments,omitempty"` // 方式1 上传的文件(路径相对会话工作目录)
+		Attachments []chatAttachment `json:"attachments,omitempty"` // 方式1 でアップロードしたファイル(パスは会話の作業ディレクトリからの相対)
 	}
 	if err := decode(r, &req); err != nil {
 		writeErr(w, 400, err.Error())
@@ -619,7 +619,7 @@ func (s *Server) runConversationTurn(ctx context.Context, cancel context.CancelC
 			log.Printf("[conv %d] append activity failed: %v", c.ID, err)
 		}
 	}
-	// On a manual stop ctx is cancelled; Chat already emits a clean "已手动停止"
+	// On a manual stop ctx is cancelled; Chat already emits a clean "手動で止めた"
 	// step, so skip the raw-error entry — only surface genuine failures.
 	if _, err := ca.Chat(ctx, c.AgentKey, sessionID, msg, maxTurns, maxDuration, webSearch, emit); err != nil {
 		finishReason = err.Error()
@@ -633,16 +633,16 @@ func (s *Server) runConversationTurn(ctx context.Context, cancel context.CancelC
 	_ = pg.TouchConversation(c.ID)
 }
 
-// triggerBehavior is an agent's cached P3 trigger post-processing策略 (see the
+// triggerBehavior is an agent's cached P3 trigger post-processing 方針 (see the
 // agents table trigger_* columns). Read once per fire in StartTriggeredRun so the
 // pump never touches the DB while holding queueMu.
 type triggerBehavior struct {
 	runMode     string // serial | parallel
-	mergeMode   string // by_task | all | none (serial 用;parallel 忽略,每条各自一个会话)
-	maxParallel int    // parallel 用的每 agent 并发上限;<=0=不限
+	mergeMode   string // by_task | all | none (serial で使う;parallel では無視し、各件がそれぞれ1つの会話)
+	maxParallel int    // parallel で使う agent ごとの同時実行の上限;<=0=無制限
 }
 
-// readTriggerBehavior loads an agent's策略, falling back to safe defaults
+// readTriggerBehavior loads an agent's 方針, falling back to safe defaults
 // (serial / all / 5) on any error or unknown enum value.
 func (s *Server) readTriggerBehavior(agentKey string) triggerBehavior {
 	b := triggerBehavior{runMode: "serial", mergeMode: "all", maxParallel: 5}
@@ -665,7 +665,7 @@ func (s *Server) readTriggerBehavior(agentKey string) triggerBehavior {
 }
 
 // StartTriggeredRun enqueues a P3 trigger fire for agentKey and pumps the queue. The
-// agent's策略 decides concurrency + merge: serial → run one at a time (optionally
+// agent's 方針 decides concurrency + merge: serial → run one at a time (optionally
 // merging by task / all / none); parallel → run each fire in its own concurrent
 // conversation up to trigger_max_parallel. Distinct agents always run concurrently.
 func (s *Server) StartTriggeredRun(agentKey, title, message string, taskID int64, mergeable bool, taskDesc, taskGoal string) {
@@ -757,18 +757,18 @@ func (s *Server) nextTriggerRun(agentKey string, cfg triggerBehavior) triggeredR
 }
 
 // [F10/F19 경계 판정 · 두뇌 입력 보존] 아래 P3 트리거 메시지 합성부(taskContextHeader·
-// finalTriggerMessage·mergeTriggeredRuns·mergeAllRuns)가 만드는 중국어 문구는 번역하지 않고
-// 원문을 보존한다. 조립된 message 는 runTriggeredRun 에서 finalTriggerMessage(item) →
+// finalTriggerMessage·mergeTriggeredRuns·mergeAllRuns)가 만드는 문구는 한국어로 번역하지 않고
+// 일본어로 둔다(원래 중국어였던 것을 일본어로 옮겼다). 조립된 message 는 runTriggeredRun 에서 finalTriggerMessage(item) →
 // ca.Chat 의 user 메시지로 들어가는 에이전트 입력(두뇌)이자, 동시에 AppendConvActivity
-// (kind="user")로 전사에 노출되는 이중 용도 문자열이다. 대상: `【任务 …】`(작업 컨텍스트
-// 헤더)·`【本会话合并了…请一并处理】`(합병 안내)·`── 触发 N ──`(구분선). BRIEF 경계 #1
+// (kind="user")로 전사에 노출되는 이중 용도 문자열이다. 대상: `【タスク …】`(작업 컨텍스트
+// 헤더)·`【この会話は…まとめた。まとめて処理すること】`(합병 안내)·`── 起動 N ──`(구분선). BRIEF 경계 #1
 // (에이전트 두뇌는 번역하지 않는다 — TSecBench 벤치마크 동작 보존)에 해당하고, 표시만
 // 한국어로 가르려면 두뇌용·전사용 두 문자열을 따로 나르도록 구조를 바꿔야 해(F16 동형)
-// 고위험·저가치라 보류한다. 합병 run 의 conversation 제목(`合并触发 · …`)은 ca.Chat 에
-// 안 들어가는 표시 전용이지만, 그 본문(위 보존 대상)이 중국어로 고정되므로 제목만 바꾸면
-// 한 대화에서 제목=한국어·본문=중국어로 섞인다(F7·F8·F12 혼재 금지) — 가치도 낮아 함께 보존.
-// 회귀 가드: trigger_merge_test.go 가 `【任务 #`·`── 触发 `·`共 N 个任务`·`【本会话合并了`·
-// `（目标：` 프레이밍을 핀한다(우발 한국어화 시 FAIL).
+// 고위험·저가치라 보류한다. 합병 run 의 conversation 제목(`まとめた起動 · …`)은 ca.Chat 에
+// 안 들어가는 표시 전용이지만, 그 본문(위 보존 대상)이 일본어로 고정되므로 제목만 바꾸면
+// 한 대화에서 제목=한국어·본문=일본어로 섞인다(F7·F8·F12 혼재 금지) — 가치도 낮아 함께 보존.
+// 회귀 가드: trigger_merge_test.go 가 `【タスク #`·`── 起動 `·`全 N 個のタスク`·`【この会話は`·
+// `（目標：` 프레이밍을 핀한다(우발 한국어화 시 FAIL).
 //
 // taskContextHeader renders a task's description/goal once. Same-task fires share
 // this block, so the scheduler no longer repeats it per event (a long task goal
@@ -782,9 +782,9 @@ func taskContextHeader(taskID int64, desc, goal string) string {
 		return ""
 	}
 	if goal != "" {
-		return fmt.Sprintf("【任务 #%d %s（目标：%s）】", taskID, trunc(desc, 200), trunc(goal, 500))
+		return fmt.Sprintf("【タスク #%d %s（目標：%s）】", taskID, trunc(desc, 200), trunc(goal, 500))
 	}
-	return fmt.Sprintf("【任务 #%d %s】", taskID, trunc(desc, 200))
+	return fmt.Sprintf("【タスク #%d %s】", taskID, trunc(desc, 200))
 }
 
 // finalTriggerMessage renders the message actually sent to the agent for a single
@@ -808,16 +808,16 @@ func mergeTriggeredRuns(items []triggeredRun) triggeredRun {
 	}
 	first := items[0]
 	var b strings.Builder
-	fmt.Fprintf(&b, "【本会话合并了任务 #%d 的 %d 条触发事件，请一并处理】\n", first.taskID, len(items))
+	fmt.Fprintf(&b, "【この会話はタスク #%d の起動のイベント %d 件をまとめた。まとめて処理すること】\n", first.taskID, len(items))
 	if h := taskContextHeader(first.taskID, first.taskDesc, first.taskGoal); h != "" {
 		fmt.Fprintf(&b, "%s\n", h) // same task → task context appears once
 	}
 	for i, it := range items {
-		fmt.Fprintf(&b, "\n── 触发 %d ──\n%s\n", i+1, it.message)
+		fmt.Fprintf(&b, "\n── 起動 %d ──\n%s\n", i+1, it.message)
 	}
 	return triggeredRun{
 		agentKey:  first.agentKey,
-		title:     fmt.Sprintf("合并触发 · task#%d · %d 条", first.taskID, len(items)),
+		title:     fmt.Sprintf("まとめた起動 · task#%d · %d 件", first.taskID, len(items)),
 		message:   b.String(),
 		taskID:    first.taskID,
 		mergeable: true,
@@ -845,7 +845,7 @@ func mergeAllRuns(items []triggeredRun) triggeredRun {
 		groups[it.taskID] = append(groups[it.taskID], it)
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "【本会话合并了队列中的 %d 条触发事件（共 %d 个任务），请一并处理】\n", len(items), len(order))
+	fmt.Fprintf(&b, "【この会話は待ち行列の起動のイベント %d 件（全 %d 個のタスク）をまとめた。まとめて処理すること】\n", len(items), len(order))
 	seq := 0
 	for _, tid := range order {
 		g := groups[tid]
@@ -854,12 +854,12 @@ func mergeAllRuns(items []triggeredRun) triggeredRun {
 		}
 		for _, it := range g {
 			seq++
-			fmt.Fprintf(&b, "\n── 触发 %d（task#%d）──\n%s\n", seq, tid, it.message)
+			fmt.Fprintf(&b, "\n── 起動 %d（task#%d）──\n%s\n", seq, tid, it.message)
 		}
 	}
 	return triggeredRun{
 		agentKey:  first.agentKey,
-		title:     fmt.Sprintf("合并触发 · 全部 · %d 条", len(items)),
+		title:     fmt.Sprintf("まとめた起動 · すべて · %d 件", len(items)),
 		message:   b.String(),
 		taskID:    first.taskID,
 		mergeable: true,

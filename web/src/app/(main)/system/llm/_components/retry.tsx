@@ -1,13 +1,13 @@
 "use client";
 
-// LLM 重试配置的共用件：五层重试各自的「次数 + 间隔」。
+// LLM の再試行の設定の共通の部品：5層の再試行それぞれの「回数 + 間隔」。
 //
-// 五层从内到外：建连(SDK) → 空响应(SDK) → 同 provider 安全窗口 → 轮询熔断 → 意图重跑。
-// 前三层跟着端点走，所以每个模型配置都能覆盖全局默认；后两层是进程级的，只有全局一份。
+// 5層は内から外へ：接続(SDK) → 空の応答(SDK) → 同じ provider の安全の窓 → ローテーションの遮断 → 意図のやり直し。
+// 前の3層はエンドポイントについて回るので、モデルの設定ごとに全体の既定を上書きできる；後の2層はプロセス単位で、全体に1組しかない。
 //
-// 所有输入都遵循同一套「留空 = 不配置」语义，与后端 db.RetryRule 一致：
-//   次数   空/0 = 用内置默认 | -1 = 关闭这层重试 | >0 = 用这个次数
-//   间隔   空/0 = 用这层原本的指数退避 | >0 = 改用这个固定毫秒间隔
+// すべての入力は同じ「空のまま = 設定しない」の意味に従い、バックエンドの db.RetryRule と一致する：
+//   回数   空/0 = 組み込みの既定 | -1 = この層の再試行をオフ | >0 = この回数
+//   間隔   空/0 = この層の元の指数バックオフ | >0 = この固定のミリ秒の間隔を使う
 
 import * as React from "react";
 
@@ -33,8 +33,8 @@ const ZERO_POLICY: LLMRetryPolicy = {
   intent: ZERO_RULE,
 };
 
-// 每层的「次数留空时的默认值」，仅用于输入框占位符。其余文案（标题 / 触发 / 说明等）
-// 走 i18n（llmPage.retryLayer.<层>.*），按运行时语言渲染。
+// 層ごとの「回数が空のときの既定値」。入力欄の置き場の文字だけに使う。ほかの文面（タイトル / きっかけ / 説明など）は
+// i18n（llmPage.retryLayer.<層>.*）を通し、実行時の言語で描く。
 export const RETRY_LAYERS = {
   connect: { defAttempts: 3 },
   empty: { defAttempts: 2 },
@@ -45,7 +45,7 @@ export const RETRY_LAYERS = {
 
 type LayerKey = keyof typeof RETRY_LAYERS;
 
-/** 毫秒的人话，只用于在输入框旁边回显，免得数零。 */
+/** ミリ秒を人の言葉にする。入力欄の横に表示するだけで、ゼロを数えずに済むようにする。 */
 function humanMs(ms: number) {
   if (!Number.isFinite(ms) || ms <= 0) return "";
   if (ms < 1000) return `${ms}ms`;
@@ -53,7 +53,7 @@ function humanMs(ms: number) {
   return `${Number((ms / 60_000).toFixed(2))}min`;
 }
 
-/** 受控数字输入：空串 ↔ 0，中间态（"-"、"1e"）原样留在本地，不打扰父级。 */
+/** 制御された数字の入力：空の文字列 ↔ 0。途中の状態（"-"、"1e"）は手元にそのまま残し、親を煩わせない。 */
 function NumField({
   id,
   value,
@@ -68,8 +68,8 @@ function NumField({
   min: number;
 }) {
   const [text, setText] = React.useState(value === 0 ? "" : String(value));
-  // 父级换了一整套值（读取到策略、切换配置）时跟上；自己敲字时不会走到这里，
-  // 因为那时 value 已经等于本地文本 parse 后的结果。
+  // 親が値の組をまるごと換えた（方針を読んだ、設定を切り替えた）ときに追いつく；自分で打っているときはここに来ない。
+  // そのときは value がもう手元の文字を parse した結果と等しいから。
   React.useEffect(() => {
     const incoming = value === 0 ? "" : String(value);
     setText((cur) => (Number(cur || 0) === value ? cur : incoming));
@@ -91,7 +91,7 @@ function NumField({
   );
 }
 
-/** 一层重试的两个旋钮。idPrefix 用来在同一页出现多次时保住 label 的 htmlFor。 */
+/** 1層の再試行の2つのつまみ。idPrefix は同じページに何度も出るときに label の htmlFor を保つのに使う。 */
 export function RetryRuleFields({
   layer,
   idPrefix,
@@ -103,7 +103,7 @@ export function RetryRuleFields({
   idPrefix: string;
   value: LLMRetryRule;
   onChange: (r: LLMRetryRule) => void;
-  /** true = 配置抽屉里的紧凑版：省掉展开说明，只留「什么错误会走到这层」这一句 */
+  /** true = 設定の引き出しの中の詰めた版：開いた説明を省き、「どんなエラーがこの層に来るか」の1文だけを残す */
   compact?: boolean;
 }) {
   const t = useTranslations("llmPage");
@@ -116,7 +116,7 @@ export function RetryRuleFields({
           <Label className="text-sm">{t(`retryLayer.${layer}.title`)}</Label>
           <span className="text-muted-foreground text-xs">{t(`retryLayer.${layer}.where`)}</span>
         </div>
-        {/* 哪些错误会走到这层，具体到状态码——填了旋钮却看不到效果，多半是错误压根不落在这层。 */}
+        {/* どんなエラーがこの層に来るかを状態コードまで具体的に示す——つまみを入れても効果が見えないなら、たいていエラーがそもそもこの層に来ていない。 */}
         <p className="text-muted-foreground text-xs">
           <span className="font-medium text-foreground">{t("retry.triggerLabel")}</span>:{" "}
           {t(`retryLayer.${layer}.trigger`)}
@@ -167,7 +167,7 @@ export function RetryRuleFields({
   );
 }
 
-/** 模型配置抽屉里的三层覆盖（跟着端点走的那三层）。 */
+/** モデルの設定の引き出しの中の3層の上書き（エンドポイントについて回る3層）。 */
 export function ProfileRetryFields({
   value,
   onChange,
@@ -197,7 +197,7 @@ export function ProfileRetryFields({
   );
 }
 
-/** 「重试与退避」tab：五层的全局默认值。 */
+/** 「再試行とバックオフ」の tab：5層の全体の既定値。 */
 export function RetryPolicyPanel() {
   const t = useTranslations("llmPage");
   const [policy, setPolicy] = React.useState<LLMRetryPolicy>(ZERO_POLICY);
@@ -224,7 +224,7 @@ export function RetryPolicyPanel() {
     if (saving) return;
     setSaving(true);
     try {
-      // 后端会把越界值夹回区间并回传，直接用回传值刷新，所见即所存。
+      // バックエンドは範囲外の値を区間に挟み戻して返すので、返った値でそのまま更新し、見えるものが保存したものになるようにする。
       const saved = await api.saveLLMRetryPolicy(policy);
       setPolicy({ ...ZERO_POLICY, ...saved });
       toast.success(t("retry.toast.saved"));

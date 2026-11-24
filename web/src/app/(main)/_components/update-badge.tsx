@@ -10,14 +10,14 @@ import { useTranslations } from "next-intl";
 import { api } from "@/lib/api";
 
 /**
- * 顶栏的"有新版本"提示：整页加载时查一次，有更新就在版本号旁边亮出来，
- * 点击直达系统配置页的「版本与更新」卡片。
+ * 上部のバーの「新しい版がある」の案内：ページ全体を読み込むときに1回問い合わせ、更新があれば版の番号の横に光らせ、
+ * 押せばシステムの設定のページの「版と更新」のカードへ直接飛ぶ。
  *
- * 后端对 GitHub 的查询结果有 30 分钟缓存，所以这里每次挂载都查一次是安全的
- * ——未认证的 GitHub API 只有 60 次/小时/IP，没有那层缓存的话，多开几个标签页
- * 就会把配额耗光，之后真想更新反而查不动。
+ * バックエンドは GitHub の問い合わせの結果を 30 分キャッシュするので、ここで取り付けるたびに1回問い合わせても安全
+ * ——認証なしの GitHub API は 60 回/時/IP しかなく、そのキャッシュがなければ、タブをいくつか開くだけで
+ * 枠を使い切り、その後本当に更新したいときにかえって問い合わせられなくなる。
  *
- * 查询失败一律静默：顶栏不是报错的地方，用户进设置页点「检查更新」会看到原因。
+ * 問い合わせの失敗は一律に黙る：上部のバーはエラーを出す場所ではなく、ユーザーが設定のページで「更新を確認」を押せば理由が見える。
  */
 export function UpdateBadge() {
   const t = useTranslations("header");
@@ -28,11 +28,11 @@ export function UpdateBadge() {
     api
       .checkUpdate()
       .then((r) => {
-        // has_update 已经包含了"版本号可比较"的判断，开发构建不会亮这个提示。
+        // has_update にはもう「版の番号を比べられるか」の判断が入っているので、開発用のビルドではこの案内は光らない。
         if (alive && r.has_update && r.latest) setLatest(r.latest.replace(/^v(?=\d)/, ""));
       })
       .catch(() => {
-        // 静默：没网 / GitHub 限流都不该在顶栏弹错误。
+        // 黙る：ネットワークがない / GitHub のレート制限のどちらも上部のバーにエラーを出すべきでない。
       });
     return () => {
       alive = false;
@@ -47,7 +47,7 @@ export function UpdateBadge() {
       title={t("updateTitle", { latest })}
       className="inline-flex items-center gap-1.5 rounded-full bg-primary px-2.5 py-1 font-medium text-primary-foreground text-xs transition-opacity hover:opacity-90"
     >
-      {/* 呼吸点：顶栏元素很多，纯文字容易被忽略，动效让它一眼可见。 */}
+      {/* 呼吸する点：上部のバーには要素が多く、文字だけだと見落とされやすいので、動きでひと目でわかるようにする。 */}
       <span className="relative flex size-1.5">
         <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary-foreground opacity-75" />
         <span className="relative inline-flex size-1.5 rounded-full bg-primary-foreground" />

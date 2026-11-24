@@ -61,12 +61,12 @@ function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
-        // 关闭对话框的唯一条件:点击的是遮罩(灰色背景)本身,且此刻没有任何 Radix 弹层
-        // (Select 下拉等)开着。其余"外部交互"一律挡掉(Esc、右上角 ✕ 仍可关):
-        //  · 点弹层里的选项 → target 不是遮罩 → 挡;
-        //  · 弹层开着时点对话框外/遮罩想收起它 → 有弹层开着 → 挡(只收弹层,不关对话框);
-        //  · 弹层收起时焦点移动被 Radix 误判为焦点移出 → target 不是遮罩 → 挡。
-        // (onInteractOutside 在指针/焦点两条路径都会触发。)调用方仍可追加逻辑。
+        // ダイアログを閉じる唯一の条件:押したのがオーバーレイ(灰色の背景)そのもので、かつそのとき Radix の重なった層
+        // (Select のプルダウンなど)が1つも開いていないこと。ほかの「外のやり取り」は一律に止める(Esc、右上の ✕ ではやはり閉じられる):
+        //  · 重なった層の選択肢を押す → target がオーバーレイでない → 止める;
+        //  · 重なった層が開いているときにダイアログの外/オーバーレイを押してそれを閉じたい → 重なった層が開いている → 止める(重なった層だけを閉じ、ダイアログは閉じない);
+        //  · 重なった層が閉じるときのフォーカスの移動を Radix がフォーカスの外への移動と誤判定する → target がオーバーレイでない → 止める。
+        // (onInteractOutside はポインタ/フォーカスの2つの経路の両方で起きる。)呼び出し側はさらにロジックを足せる。
         onInteractOutside={(e) => {
           const target = e.detail.originalEvent.target as Element | null
           const onOverlay = !!target?.closest?.("[data-slot='dialog-overlay']")

@@ -16,7 +16,7 @@ import { getDateLocale } from "@/i18n/datetime";
 import { api } from "@/lib/api";
 import type { NotificationChannel, NotificationDelivery } from "@/lib/types";
 
-// DeliveryList 是投递记录表：可按渠道与状态筛选，失败项可手动重发。
+// DeliveryList は配信の記録の表：チャンネルと状態で絞り込め、失敗した項目は手で送り直せる。
 export function DeliveryList({ channels }: { channels: NotificationChannel[] }) {
   const t = useTranslations("notifyPage");
   // 전송 상태·심각도 라벨은 전역 공유 `status` 네임스페이스에서 온다(StatusBadge 와 동일 출처).
@@ -150,7 +150,7 @@ export function DeliveryList({ channels }: { channels: NotificationChannel[] }) 
                   <TableCell className="text-muted-foreground text-sm">{d.attempts}</TableCell>
                   <TableCell className="text-muted-foreground max-w-md text-xs break-all">{d.last_error}</TableCell>
                   <TableCell>
-                    {/* 只有失败/跳过的才给重发入口：已送达的重发会造成重复推送。 */}
+                    {/* 失敗/飛ばしたものだけに送り直しの入り口を出す：届いたものを送り直すと通知が重なる。 */}
                     {(d.state === "failed" || d.state === "skipped") && (
                       <Button size="sm" variant="outline" onClick={() => retry(d.id)}>
                         <RotateCcwIcon /> {t("delivery.resend")}

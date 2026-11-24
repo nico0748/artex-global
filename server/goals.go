@@ -28,13 +28,13 @@ type goalSpec struct {
 }
 
 // launchTask runs the shared post-creation sequence for a task created via ANY
-// path (HTTP createTask 或 orchestration spawn_task),避免两处复制粘贴:
-//  1. seed 根资产,喂给事件驱动 loop;
-//  2. 可选种子意图,worker 免等首轮 planner 直接开跑;
-//  3. 后台异步做目标分解(发「0차 목표 분해」round + LLM 分解步骤 + 逐条 goal,页面可见),
-//     分解完再 engine.Run —— 引擎在 goal 节点就绪后才启动,避免 planner 抢在 goal 之前跑的竞态。
+// path (HTTP の createTask または orchestration の spawn_task),2か所でコピーして貼り付けるのを避ける:
+//  1. 根の資産を seed し、イベント駆動の loop に与える;
+//  2. 任意の種の意図。worker が最初のラウンドの planner を待たずにすぐ動ける;
+//  3. バックグラウンドで非同期に目標を分解する(「0차 목표 분해」の round を出し + LLM の分解の手順 + goal を1件ずつ、ページから見える),
+//     分解し終えてから engine.Run —— エンジンは goal ノードの準備ができてから起動し、planner が goal より先に動く競合を避ける。
 //
-// 异步(goroutine)所以调用方立即返回,两条路径行为一致:秒建任务、后台拆目标。
+// 非同期(goroutine)なので呼び出し元はすぐ戻り、2つの経路の挙動は同じ:タスクはすぐ作られ、目標はバックグラウンドで分解される。
 // 표시 전용 활동 요약(작업 단위·node_id 없음·전사에만 노출·되먹임 경로 미접촉).
 // 초기 목표 분해 라운드와 동시 실행 대기열 상태 안내다. 한국어화해도 두뇌 입력
 // (BRIEF 경계 #1)을 건드리지 않는다. 포맷 인자(%d)는 원형 보존. [[G132]]
@@ -55,7 +55,7 @@ func (s *Server) launchTask(t *Task, seedText string, seedFirstIntent bool) {
 	}
 	s.engine.decInflight(t.ID)
 	if _, err := s.admitTask(t, "bootstrap"); err != nil {
-		log.Printf("[concurrency] task %s 启动失败: %v", t.ID, err)
+		log.Printf("[concurrency] task %s 起動に失敗: %v", t.ID, err)
 	}
 }
 
@@ -197,8 +197,8 @@ func (s *Server) admitTaskWhen(t *Task, mode string, requirePaused bool) (queued
 	// this ordering, its already-running worker loops can claim the newly-opened
 	// intent in the gap between status=running and queued=true.
 	if shouldQueue || wasTerminal || wasPaused || wasQueued {
-		s.engine.Pause(t.ID, agent.Causef("queued_for_admission", "任务等待运行准入",
-			"任务正在等待并发队列或准入状态提交，本次执行已停止；只有获得运行槽后才会重新领取意图"))
+		s.engine.Pause(t.ID, agent.Causef("queued_for_admission", "タスクは実行の受け入れを待っている",
+			"タスクは同時実行の待ち行列か受け入れの状態の確定を待っているので、今回の実行は止めた；実行の枠を得てはじめて意図を取り直す"))
 	}
 
 	status := lifecycle.Status
@@ -286,11 +286,11 @@ func (s *Server) reconcileConcurrency() {
 				continue
 			}
 			mode := s.resumeAdmissionMode(task)
-			s.engine.Pause(task.ID, agent.Causef("llm_unavailable_queued", "LLM 不可用，任务进入等待队列",
-				"任务当前无法解析可运行的 Planner/Worker LLM，已释放并发槽；配置恢复后按队列顺序继续"))
+			s.engine.Pause(task.ID, agent.Causef("llm_unavailable_queued", "LLM が使えないので、タスクは待ち行列に入った",
+				"タスクは現在、実行できる Planner/Worker の LLM を解決できないので、同時実行の枠を解放した；設定が戻ったら待ち行列の順に続ける"))
 			if err := s.m.EnqueueTask(task.ID, mode); err != nil {
 				s.engine.Resume(task)
-				log.Printf("[concurrency] task %s 因 LLM 不可用入队失败: %v", task.ID, err)
+				log.Printf("[concurrency] task %s LLM が使えないので待ち行列に入れようとしたが失敗: %v", task.ID, err)
 				continue
 			}
 			s.engine.emitActivity(task, db.Activity{Worker: "system", Kind: "text",
@@ -366,18 +366,18 @@ func (s *Server) reconcileConcurrency() {
 	}
 }
 
-// reviveTask 让一个已停下的任务重新跑起来:把终态(done/failed/timeout)拉回 running、
-// 解除暂停,并(重)启动引擎循环 + 唤醒。已在 running 且未暂停的任务:只剩 Run 里的一次
-// Notify,近乎无副作用。用于「主 agent set_goals 新增目标」和「重跑 blocked 意图」两处。
+// reviveTask は止まったタスクを再び動かす:終端(done/failed/timeout)を running に戻し、
+// 一時停止を解き、エンジンのループを(再)起動 + 起こす。すでに running で一時停止していないタスク:Run の中の1回の
+// Notify だけが残り、ほぼ副作用はない。「メイン agent の set_goals による目標の追加」と「blocked の意図のやり直し」の2か所で使う。
 //
-// 为什么必须显式复活:planner/worker 循环的终态门(engine.go)会吞掉普通 notify——光改
-// 图 + Notify 唤不醒已判完成的任务;重启后终态任务的 goroutine 也可能已不在,故还要 Run。
+// なぜ明示的に復活させる必要があるか:planner/worker のループの終端の門(engine.go)は通常の notify を飲み込む——
+// グラフを変えて Notify するだけでは完了と判定済みのタスクを起こせない;再起動後は終端のタスクの goroutine もなくなっているかもしれないので、Run も必要。
 func (s *Server) reviveTask(t *Task) {
 	if t == nil {
 		return
 	}
 	if _, err := s.admitTask(t, "resume"); err != nil {
-		log.Printf("[revive] task %s 恢复失败: %v", t.ID, err)
+		log.Printf("[revive] task %s 復元に失敗: %v", t.ID, err)
 	}
 }
 
@@ -416,7 +416,7 @@ func (s *Server) createGoals(ctx context.Context, t *Task, emit func(db.Activity
 		// as a single goal so the task still has something to judge against. This is the
 		// only path that writes here — decomposed goals are already persisted by the tool.
 		if g := strings.TrimSpace(t.Goal); g != "" {
-			log.Printf("[goals] task %s: LLM 目标拆解无产出，回退为「原始目标作为单目标」", t.ID)
+			log.Printf("[goals] task %s: LLM による目標の分解で何も産出されなかったので、「元の目標を1つの目標とする」に戻す", t.ID)
 			origin, _ := t.Store.OriginFactID()
 			id, _ := t.Store.AddNode(db.KindGoal, map[string]any{"text": g}, 0, "open", "system", nil)
 			if origin > 0 && id > 0 {
